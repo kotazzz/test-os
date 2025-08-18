@@ -6,10 +6,12 @@ QEMU_BIN = qemu-system-x86_64.exe
 
 CFLAGS = -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib -mcmodel=large -mno-sse
 LDFLAGS = -T linker.ld -nostdlib -m elf_x86_64
-ASMFLAGS = -f elf64
+ASMFLAGS = -f elf64 -w+other
 
 ISO_DIR = iso
 ISO_FILE = myos.iso
+
+QEMU_ARGS = -m 16G
 
 all: kernel.elf $(ISO_FILE) run
 
@@ -37,7 +39,7 @@ $(ISO_FILE): kernel.elf
 
 
 run: $(ISO_FILE)
-	$(QEMU_BIN) -cdrom $(ISO_FILE) -serial stdio
+	$(QEMU_BIN) -cdrom $(ISO_FILE) -serial stdio $(QEMU_ARGS)
 
 clean:
 	rm -rf boot.o interrupt.o kernel.o kernel.elf $(ISO_DIR) $(ISO_FILE)

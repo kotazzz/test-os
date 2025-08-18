@@ -50,6 +50,9 @@ _start:
     cli
     mov esp, stack_top
 
+    ; Save multiboot2 info pointer from EBX
+    mov edi, ebx  ; Save MBI pointer in EDI (preserved across calls)
+
     ; Check multiboot2
     cmp eax, 0x36d76289
     jne .no_multiboot
@@ -169,6 +172,9 @@ long_mode_start:
     
     ; Set up stack
     mov rsp, stack_top
+    
+    ; Pass multiboot2 info pointer as first argument (RDI in x86-64 calling convention)
+    ; EDI was saved in 32-bit mode, now it's automatically extended to RDI
     
     ; Call kernel
     call kmain

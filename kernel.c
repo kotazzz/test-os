@@ -8,6 +8,63 @@
 #define KEYBOARD_DATA_PORT 0x60
 #define KEYBOARD_STATUS_PORT 0x64
 
+struct multiboot_tag {
+    uint32_t type;
+    uint32_t size;
+} __attribute__((packed));
+
+#define MULTIBOOT_TAG_TYPE_MMAP 6
+#define MULTIBOOT_TAG_TYPE_END 0
+
+struct multiboot_tag_mmap {
+    uint32_t type;
+    uint32_t size;
+    uint32_t entry_size;
+    uint32_t entry_version;
+} __attribute__((packed));
+
+struct multiboot_mmap_entry {
+    uint64_t addr;
+    uint64_t len;
+    uint32_t type;
+    uint32_t zero;
+} __attribute__((packed));
+
+#define MULTIBOOT_TAG_ALIGN_MASK 7
+
+uint64_t parse_multiboot2_memory_map(void *mbi) {
+    if (mbi == NULL) {
+        return 0;
+    }
+    uint8_t *ptr = (uint8_t*)mbi + 8; // multiboot2: skip total_size + reserved
+    uint64_t total_usable = 0;
+
+    for (;;) {
+        struct multiboot_tag *tag = (struct multiboot_tag*)ptr;
+        if (tag->type == MULTIBOOT_TAG_TYPE_END) break;
+
+        if (tag->type == MULTIBOOT_TAG_TYPE_MMAP) {
+            struct multiboot_tag_mmap *m = (struct multiboot_tag_mmap*)tag;
+            uint8_t *entry = ptr + sizeof(*m);
+            uint8_t *end = ptr + tag->size;
+            while (entry < end) {
+                struct multiboot_mmap_entry *e = (struct multiboot_mmap_entry*)entry;
+                if (e->type == 1) { // 1 == usable RAM
+                    total_usable += e->len;
+                }
+                entry += m->entry_size;
+            }
+        }
+        // tags are 8-byte aligned
+        ptr += (tag->size + MULTIBOOT_TAG_ALIGN_MASK) & ~((uint32_t)MULTIBOOT_TAG_ALIGN_MASK);
+    }
+
+    return total_usable; // bytes
+}
+    return total_usable; // bytes
+}
+
+
 // IDT structures
 struct idt_entry {
     uint16_t offset_low;
@@ -93,7 +150,26 @@ static void putc(char c){
 }
 
 static void puts(const char* s){
-    while(*s) putc(*s++);
+#define MAX_UINT64_DIGITS 21 // Enough for 64-bit number in decimal + null terminator
+
+static void puts_uint64(uint64_t num) {
+    char buffer[MAX_UINT64_DIGITS];
+    int i = MAX_UINT64_DIGITS - 1;
+    buffer[i--] = '\0'; // Null-terminate the string
+    char buffer[21]; // Enough for 64-bit number in decimal + null terminator
+    int i = 20;
+    buffer[i--] = '\0'; // Null-terminate the string
+
+    if (num == 0) {
+        buffer[i--] = '0';
+    } else {
+        while (num > 0) {
+            buffer[i--] = '0' + (num % 10);
+            num /= 10;
+        }
+    }
+
+    puts(&buffer[i + 1]); // Print the string starting from the first digit
 }
 
 // External assembly interrupt handler
@@ -166,9 +242,19 @@ static void init_idt(void) {
     
     // Load IDT
     __asm__ volatile ("lidt %0" : : "m" (idt_pointer));
+static void display_memory_info(uint64_t total_memory) {
+    puts("Total usable memory: ");
+    puts_uint64(total_memory);
+    puts(" bytes\n");
+    puts("Total usable memory: ");
+    puts_uint64(total_memory / 1024);
+    puts(" KB\n");
+    puts("Total usable memory: ");
+    puts_uint64(total_memory / (1024 * 1024));
+    puts(" MB\n");
 }
 
-void kmain(void){
+void kmain(void *mbi){
     row = 0;
     col = 0;
     
@@ -186,9 +272,14 @@ void kmain(void){
     
     // Enable interrupts
     __asm__ volatile ("sti");
-    
+
+    uint64_t total_memory =  parse_multiboot2_memory_map(mbi);
+    display_memory_info(total_memory);
+
     // Main loop - just halt and wait for interrupts
     while(1) {
         __asm__ volatile ("hlt");
+    }
+}
     }
 }
