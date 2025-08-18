@@ -27,9 +27,9 @@ extern kmain
 
 _start:
     cli
-    mov rsp, stack_top    ; set stack pointer
-    push rbx
-    push rax
+    mov esp, stack_top    ; set stack pointer
+    push ebx
+    push eax
     call kmain
 halt_loop:
     hlt
