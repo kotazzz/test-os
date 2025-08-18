@@ -5,10 +5,10 @@ SECTIONS
     . = 1M;
 
     /* Keep multiboot2 header in ELF */
-    .multiboot2 : { KEEP(*(.multiboot2)) }
+    .multiboot2 : ALIGN(8) { KEEP(*(.multiboot2)) }
 
-    .text : { *(.text*) }
-    .rodata : { *(.rodata*) }
-    .data : { *(.data*) }
-    .bss  : { *(.bss*) *(COMMON) }
+    .text : ALIGN(4096) { *(.text*) }
+    .rodata : ALIGN(4096) { *(.rodata*) }
+    .data : ALIGN(4096) { *(.data*) }
+    .bss  : ALIGN(4096) { *(.bss*) *(COMMON) }
 }

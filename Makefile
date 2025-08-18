@@ -4,9 +4,9 @@ LD = x86_64-elf-ld.exe
 ASM = nasm.exe
 QEMU_BIN = qemu-system-x86_64.exe
 
-CFLAGS = -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib -m32
-LDFLAGS = -T linker.ld -nostdlib -m elf_i386
-ASMFLAGS = -f elf32
+CFLAGS = -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib -mcmodel=large -mno-sse
+LDFLAGS = -T linker.ld -nostdlib -m elf_x86_64
+ASMFLAGS = -f elf64
 
 ISO_DIR = iso
 ISO_FILE = myos.iso

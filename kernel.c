@@ -17,6 +17,7 @@ void kmain(void){
     row = 0;
     col = 0;
     for(int i=0;i<80*25;i++) VGA[i]=(' ' | (0x07<<8));
-    puts("Hello from minimal kernel!\n");
+    puts("Hello from 64-bit kernel!\n");
+    puts("Long mode successfully enabled!\n");
     for(;;) __asm__ volatile("hlt");
 }
