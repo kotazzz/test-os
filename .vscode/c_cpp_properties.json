@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "name": "Kernel Development",
+            "includePath": [
+                "${workspaceFolder}/**"
+            ],
+            "defines": [
+                "__GNUC__",
+                "__x86_64__"
+            ],
+            "compilerPath": "x86_64-elf-gcc.exe",
+            "cStandard": "c11",
+            "intelliSenseMode": "gcc-x64",
+            "compilerArgs": [
+                "-ffreestanding",
+                "-fno-stack-protector",
+                "-fno-builtin",
+                "-nostdlib"
+            ]
+        }
+    ],
+    "version": 4
+}
