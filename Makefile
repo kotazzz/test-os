@@ -17,11 +17,14 @@ all: kernel.elf $(ISO_FILE) run
 boot.o: boot.s
 	$(ASM) $(ASMFLAGS) boot.s -o boot.o
 
+interrupt.o: interrupt.s
+	$(ASM) $(ASMFLAGS) interrupt.s -o interrupt.o
+
 kernel.o: kernel.c
 	$(CC) $(CFLAGS) -c kernel.c -o kernel.o
 
-kernel.elf: boot.o kernel.o
-	$(LD) $(LDFLAGS) boot.o kernel.o -o kernel.elf
+kernel.elf: boot.o interrupt.o kernel.o
+	$(LD) $(LDFLAGS) boot.o interrupt.o kernel.o -o kernel.elf
 
 # GRUB ISO
 $(ISO_FILE): kernel.elf
@@ -37,4 +40,4 @@ run: $(ISO_FILE)
 	$(QEMU_BIN) -cdrom $(ISO_FILE) -serial stdio
 
 clean:
-	rm -rf boot.o kernel.o kernel.elf $(ISO_DIR) $(ISO_FILE)
+	rm -rf boot.o interrupt.o kernel.o kernel.elf $(ISO_DIR) $(ISO_FILE)
