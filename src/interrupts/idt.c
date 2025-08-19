@@ -30,6 +30,9 @@ void init_idt() {
 
     // Устанавливаем специальный обработчик для IRQ0 (таймер)
     set_idt_gate(32, (uint64_t)irq0_handler, 0x08, 0x8E);
+    
+    // Устанавливаем специальный обработчик для IRQ1 (клавиатура)
+    set_idt_gate(33, (uint64_t)irq1_handler, 0x08, 0x8E);
 
     lidt(&idtp);
 }

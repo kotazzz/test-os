@@ -5,10 +5,21 @@
 
 typedef void (*isr_t)(void);
 
-void isr_handler(uint8_t n); // общий обработчик
+// Основные функции
+void isr_handler(uint8_t n);
 void register_interrupt_handler(uint8_t n, isr_t handler);
 
-extern void isr_stub_default(); // дефолтная заглушка
-extern void irq0_handler();     // обработчик IRQ0 (таймер)
+// Assembly заглушки
+extern void isr_stub_default();
+extern void irq0_handler();
+extern void irq1_handler();
+
+// Макрос для легкого добавления новых IRQ обработчиков
+#define DECLARE_IRQ_HANDLER(num) extern void irq##num##_handler();
+
+// Можно легко добавить новые IRQ обработчики
+DECLARE_IRQ_HANDLER(2)  // IRQ2
+DECLARE_IRQ_HANDLER(3)  // IRQ3
+// и т.д.
 
 #endif

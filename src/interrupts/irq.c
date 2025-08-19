@@ -1,23 +1,17 @@
 #include "irq.h"
 #include "isr.h"
+#include "isr_macros.h"
 #include "../io.h"
 #include "../vga.h"
 
-void format_time(int seconds) {
-    int hours = seconds / 3600;
-    int minutes = (seconds % 3600) / 60;
-    seconds = seconds % 60;
-    puts("Passed time: ");
-    if (hours < 10) puts("0");
-    puts_uint64(hours);
-    puts(":");
-    if (minutes < 10) puts("0");
-    puts_uint64(minutes);
-    puts(":");
-    if (seconds < 10) puts("0");
-    puts_uint64(seconds);
+void keyboard_handler() {
+    uint8_t scancode = inb(0x60);
+    
+    puts("Keyboard scancode: 0x");
+    puts_hex64(scancode);
     puts("\n");
-    row--;
+    
+    outb(0x20, 0x20); // EOI
 }
 
 void timer_handler() {
@@ -27,11 +21,12 @@ void timer_handler() {
     if (tick_count >= 100) { // 100 тиков = 1 секунда
         tick_count = 0;
         seconds++;
-        format_time(seconds);
+        puts("Time passed: ");
+        puts_uint64(seconds);
+        puts(" seconds\n");
     }
     outb(0x20, 0x20); // EOI
 }
-
 
 void init_timer(int frequency) {
     int divisor = 1193180 / frequency;
@@ -39,7 +34,7 @@ void init_timer(int frequency) {
     outb(0x40, divisor & 0xFF);
     outb(0x40, (divisor >> 8) & 0xFF);
 
-    register_interrupt_handler(32, timer_handler);
+    REGISTER_IRQ_HANDLER(0, timer_handler);
 }
 
 void remap_pic() {
@@ -57,7 +52,11 @@ void remap_pic() {
 
 void init_pic() {
     remap_pic();
-    // маскируем все IRQ кроме нужных (например таймер)
-    outb(0x21, 0xFE); // IRQ0 (таймер) разрешен, остальные маскированы
+    // маскируем все IRQ кроме нужных (таймер и клавиатура)
+    outb(0x21, 0xFC); // IRQ0 (таймер) и IRQ1 (клавиатура) разрешены, остальные маскированы
     outb(0xA1, 0xFF); // маскируем все вторичные
+}
+
+void init_keyboard() {
+    REGISTER_IRQ_HANDLER(1, keyboard_handler);
 }

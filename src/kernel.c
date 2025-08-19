@@ -327,6 +327,7 @@ void kmain(void *mbi){
     init_idt();
     init_pic();
     init_timer(100);
+    init_keyboard();
     
     // Enable interrupts
     __asm__ volatile ("sti");

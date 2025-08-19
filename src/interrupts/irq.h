@@ -6,5 +6,6 @@
 void remap_pic();
 void init_timer(int frequency);
 void init_pic();
+void init_keyboard();
 
 #endif
