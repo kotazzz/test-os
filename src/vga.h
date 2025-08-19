@@ -43,6 +43,7 @@ void puts_hex64(uint64_t num);
 
 // Simplified color functions
 void puts_fg(const char* s, uint8_t fg_color);  // Black background by default
+void puts_bg(const char* s, uint8_t bg_color);  // Current text color
 void puts_uint64_fg(uint64_t num, uint8_t fg_color);  // Colored number output
 
 // Color functions

@@ -157,6 +157,46 @@ static void cmd_heap_info(void *mbi) {
     puts_uint64((end - current) / 1024); puts(" KB\n");
 }
 
+// Memory visualization command
+static void cmd_memory_visualization(void *mbi) {
+    puts_color("Memory Visualization:\n", COLOR_INFO);
+
+    uint64_t total_memory = parse_multiboot2_memory_map(mbi);
+    uint64_t used_memory = pmm_get_used_memory();
+    uint64_t free_memory = pmm_get_free_memory();
+
+    puts_color("  Total Memory: ", COLOR_TEXT);
+    puts_uint64_fg(total_memory / (1024 * 1024), VGA_COLOR_WHITE);
+    puts(" MB\n");
+
+    puts_color("  Used Memory: ", COLOR_TEXT);
+    puts_uint64_fg(used_memory / (1024 * 1024), VGA_COLOR_RED);
+    puts(" MB\n");
+
+    puts_color("  Free Memory: ", COLOR_TEXT);
+    puts_uint64_fg(free_memory / (1024 * 1024), VGA_COLOR_GREEN);
+    puts(" MB\n\n");
+
+    const int block_size = 1024 * 1024; // 1 MB per block
+    const int blocks_per_line = 64;
+    int total_blocks = total_memory / block_size;
+    int used_blocks = used_memory / block_size;
+
+    for (int i = 0; i < total_blocks; i++) {
+        if (i < used_blocks) {
+            puts_bg("_", VGA_COLOR_RED); // Used memory block
+        } else {
+            puts_bg("_", VGA_COLOR_GREEN); // Free memory block
+        }
+
+        if ((i + 1) % blocks_per_line == 0) {
+            puts("\n");
+        }
+    }
+
+    puts("\n");
+}
+
 // Command registry
 static shell_command_t commands[] = {
     {"cat", "Show pretty cat", cmd_cat},
@@ -170,6 +210,7 @@ static shell_command_t commands[] = {
     {"heap-info", "Show kernel heap info", cmd_heap_info},
     {"help", "Show this help", cmd_help},
     {"clear", "Clear the screen", cmd_clear},
+    {"memv", "Visualize memory state", cmd_memory_visualization},
     {nullptr, nullptr, nullptr}
 };
 

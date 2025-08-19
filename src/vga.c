@@ -124,6 +124,10 @@ void puts_fg(const char* s, uint8_t fg_color) {
     puts_color(s, VGA_ENTRY_COLOR(fg_color, VGA_COLOR_BLACK));
 }
 
+void puts_bg(const char* s, uint8_t bg_color) {
+    puts_color(s, VGA_ENTRY_COLOR(current_color & 0x0F, bg_color));
+}
+
 void puts_uint64_fg(uint64_t num, uint8_t fg_color) {
     uint8_t old_color = current_color;
     current_color = VGA_ENTRY_COLOR(fg_color, VGA_COLOR_BLACK);
