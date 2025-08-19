@@ -1,45 +1,70 @@
-# WSL friendly paths
-CC = x86_64-elf-gcc.exe
-LD = x86_64-elf-ld.exe
-ASM = nasm.exe
-QEMU_BIN = qemu-system-x86_64.exe
+# Toolchain
+CC       = x86_64-elf-gcc.exe
+CXX     := x86_64-elf-g++.exe
+LD       = x86_64-elf-ld.exe
+ASM      = nasm.exe
+QEMU     = qemu-system-x86_64.exe
 
-CFLAGS = -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib -mcmodel=large -mno-sse
-LDFLAGS = -T linker.ld -nostdlib -m elf_x86_64
+# Flags
+CFLAGS   = -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib -mcmodel=large -mno-sse -MMD -MP
+CXXFLAGS:= $(CFLAGS) -fno-exceptions -fno-rtti
+LDFLAGS  = -T linker.ld -nostdlib -m elf_x86_64
 ASMFLAGS = -f elf64 -w+other
 
-ISO_DIR = iso
-ISO_FILE = myos.iso
+# Directories
+SRC      = src
+BUILD    = build
+ISO_DIR  = iso
+DIST     = dist
+ISO_FILE = $(DIST)/myos.iso
 
-QEMU_ARGS = -m 16G
+# Sources
+CSRC    := $(shell find $(SRC) -name '*.c')
+CPPSRC  := $(shell find $(SRC) -name '*.cpp')
+ASMSRC  := $(shell find $(SRC) -name '*.s')
 
-all: kernel.elf $(ISO_FILE) run
+OBJS    := $(patsubst $(SRC)/%, $(BUILD)/%, \
+              $(CSRC:.c=.o) $(CPPSRC:.cpp=.o) $(ASMSRC:.s=.o))
 
 
-boot.o: boot.s
-	$(ASM) $(ASMFLAGS) boot.s -o boot.o
+# QEMU
+QEMU_ARGS = -serial stdio
 
-interrupt.o: interrupt.s
-	$(ASM) $(ASMFLAGS) interrupt.s -o interrupt.o
+.PHONY: all clean run iso
 
-kernel.o: kernel.c
-	$(CC) $(CFLAGS) -c kernel.c -o kernel.o
+all: $(BUILD)/kernel.elf iso run
 
-kernel.elf: boot.o interrupt.o kernel.o
-	$(LD) $(LDFLAGS) boot.o interrupt.o kernel.o -o kernel.elf
+# C
+$(BUILD)/%.o: $(SRC)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
 
-# GRUB ISO
-$(ISO_FILE): kernel.elf
+# C++
+$(BUILD)/%.o: $(SRC)/%.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# ASM
+$(BUILD)/%.o: $(SRC)/%.s
+	@mkdir -p $(dir $@)
+	$(ASM) $(ASMFLAGS) $< -o $@
+
+# Линковка
+$(BUILD)/kernel.elf: $(OBJS)
+	$(LD) $(LDFLAGS) $^ -o $@
+
+iso: $(BUILD)/kernel.elf
+	@mkdir -p $(DIST)
 	rm -rf $(ISO_DIR)
 	mkdir -p $(ISO_DIR)/boot/grub
-	mkdir -p $(ISO_DIR)/boot
-	cp kernel.elf $(ISO_DIR)/boot/
+	cp $< $(ISO_DIR)/boot/
 	cp grub.cfg $(ISO_DIR)/boot/grub/
 	grub-mkrescue -o $(ISO_FILE) $(ISO_DIR)
 
-
-run: $(ISO_FILE)
-	$(QEMU_BIN) -cdrom $(ISO_FILE) -serial stdio $(QEMU_ARGS)
+run: iso
+	$(QEMU) -cdrom $(ISO_FILE) $(QEMU_ARGS)
 
 clean:
-	rm -rf boot.o interrupt.o kernel.o kernel.elf $(ISO_DIR) $(ISO_FILE)
+	rm -rf $(BUILD) $(DIST) $(ISO_DIR)
+
+-include $(OBJS:.o=.d)
