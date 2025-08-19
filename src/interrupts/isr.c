@@ -1,7 +1,7 @@
 #include "isr.h"
 #include "irq.h"
-#include "../io.h"
-#include "../vga.h"
+#include "io.h"
+#include "vga.h"
 
 static isr_t interrupt_handlers[256];
 

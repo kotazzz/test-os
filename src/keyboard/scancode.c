@@ -1,5 +1,5 @@
 #include "scancode.h"
-#include "../vga.h"
+#include "vga.h"
 
 static const char scancode_to_ascii[128] = {
     0,    27,   '1',  '2',  '3',  '4',  '5',  '6',  '7',  '8',

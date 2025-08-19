@@ -1,5 +1,5 @@
 #include "pic.h"
-#include "../io.h"
+#include "io.h"
 
 void remap_pic() {
     outb(0x20, 0x11);

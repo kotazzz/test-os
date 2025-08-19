@@ -1,9 +1,9 @@
 #include "keyboard_irq.h"
 #include "scancode.h"
 #include "input.h"
-#include "../interrupts/isr_macros.h"
-#include "../io.h"
-#include "../vga.h"
+#include "interrupts/isr_macros.h"
+#include "io.h"
+#include "vga.h"
 
 void keyboard_handler() {
     uint8_t scancode = inb(0x60);

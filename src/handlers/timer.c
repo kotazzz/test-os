@@ -1,7 +1,7 @@
 #include "timer.h"
-#include "../interrupts/isr_macros.h"
-#include "../io.h"
-#include "../vga.h"
+#include "interrupts/isr_macros.h"
+#include "io.h"
+#include "vga.h"
 
 unsigned long ticks = 0;
 
