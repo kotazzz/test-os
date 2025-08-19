@@ -4,6 +4,7 @@
 #include "interrupts/irq.h"
 #include "keyboard/input.h"
 #include "handlers/timer.h"
+#include "shell.h"
 
 #define NULL ((void*)0)
 
@@ -337,83 +338,7 @@ void kmain(void *mbi){
 
     puts("Interrupts enabled. System ready.\n");
     puts("Type something and press Enter:\n");
-    // Mini shell
-    char input_buffer[256];
     
-    
-    puts("Mini Shell - Available commands:\n");
-    puts("  ticks  - Show system ticks\n");
-    puts("  memory - Show memory information\n");
-    puts("  help   - Show this help\n");
-    puts("shell> ");
-    
-    while(1) {
-        char* result = gets(input_buffer);
-        if (result != NULL) {
-            // Simple string comparison functions
-            int is_ticks = 1, is_memory = 1, is_help = 1;
-            char *ticks_cmd = "ticks", *memory_cmd = "memory", *help_cmd = "help";
-            
-            // Compare with "ticks"
-            for (int i = 0; i < 6; i++) {
-                if (result[i] != ticks_cmd[i]) {
-                    is_ticks = 0;
-                    break;
-                }
-            }
-            if (result[5] != '\0') is_ticks = 0;
-            
-            // Compare with "memory"
-            for (int i = 0; i < 7; i++) {
-                if (result[i] != memory_cmd[i]) {
-                    is_memory = 0;
-                    break;
-                }
-            }
-            if (result[6] != '\0') is_memory = 0;
-            
-            // Compare with "help"
-            for (int i = 0; i < 5; i++) {
-                if (result[i] != help_cmd[i]) {
-                    is_help = 0;
-                    break;
-                }
-            }
-            if (result[4] != '\0') is_help = 0;
-            
-            if (is_ticks) {
-                puts("System ticks: ");
-                puts_uint64(ticks);
-                puts("\n");
-            }
-            else if (is_memory) {
-                uint64_t total_memory = parse_multiboot2_memory_map(mbi);
-                puts("Memory Information:\n");
-                puts("  Total usable: ");
-                puts_uint64(total_memory);
-                puts(" bytes (");
-                puts_uint64(total_memory / 1024);
-                puts(" KB, ");
-                puts_uint64(total_memory / (1024 * 1024));
-                puts(" MB)\n");
-            }
-            else if (is_help) {
-                puts("Available commands:\n");
-                puts("  ticks  - Show system ticks\n");
-                puts("  memory - Show memory information\n");
-                puts("  help   - Show this help\n");
-            }
-            else {
-                puts("Unknown command: ");
-                puts(result);
-                puts("\nType 'help' for available commands\n");
-            }
-            
-            puts("shell> ");
-        }
-        
-        // Increment ticks and small pause
-        ticks++;
-        for (volatile int i = 0; i < 100000; i++);
-    }
+    // Start the mini shell
+    run_shell(mbi);
 }

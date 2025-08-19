@@ -1,5 +1,8 @@
 #include <stdint.h>
+#include "vga.h"
+
 int row=0, col=0;
+uint8_t current_color = VGA_ENTRY_COLOR(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
 
 volatile uint16_t* VGA = (uint16_t*)0xB8000;
 
@@ -14,7 +17,7 @@ void putc(char c){
             }
             // Clear last line
             for(int i = 80 * 24; i < 80 * 25; i++) {
-                VGA[i] = ' ' | (0x07 << 8);
+                VGA[i] = ' ' | (current_color << 8);
             }
             row = 24;
         }
@@ -23,12 +26,12 @@ void putc(char c){
     if(c == '\b'){
         if(col > 0) {
             col--;
-            VGA[row * 80 + col] = ' ' | (0x07 << 8);
+            VGA[row * 80 + col] = ' ' | (current_color << 8);
         }
         return;
     }
     
-    VGA[row * 80 + col] = (uint16_t)c | (0x07 << 8);
+    VGA[row * 80 + col] = (uint16_t)c | (current_color << 8);
     if(++col >= 80){ 
         col = 0; 
         row++; 
@@ -39,7 +42,7 @@ void putc(char c){
             }
             // Clear last line
             for(int i = 80 * 24; i < 80 * 25; i++) {
-                VGA[i] = ' ' | (0x07 << 8);
+                VGA[i] = ' ' | (current_color << 8);
             }
             row = 24;
         }
@@ -87,4 +90,35 @@ void puts_hex64(uint64_t num) {
     }
     
     puts(&buffer[i + 1]);
+}
+
+// Color management functions
+void set_text_color(uint8_t fg, uint8_t bg) {
+    current_color = VGA_ENTRY_COLOR(fg, bg);
+}
+
+void set_text_color_fg(uint8_t fg) {
+    current_color = VGA_ENTRY_COLOR(fg, current_color >> 4);
+}
+
+void set_text_color_bg(uint8_t bg) {
+    current_color = VGA_ENTRY_COLOR(current_color & 0x0F, bg);
+}
+
+void putc_color(char c, uint8_t color) {
+    uint8_t old_color = current_color;
+    current_color = color;
+    putc(c);
+    current_color = old_color;
+}
+
+void puts_color(const char* s, uint8_t color) {
+    uint8_t old_color = current_color;
+    current_color = color;
+    puts(s);
+    current_color = old_color;
+}
+
+uint8_t get_current_color(void) {
+    return current_color;
 }
