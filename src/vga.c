@@ -119,6 +119,18 @@ void puts_color(const char* s, uint8_t color) {
     current_color = old_color;
 }
 
+// Simplified functions with black background
+void puts_fg(const char* s, uint8_t fg_color) {
+    puts_color(s, VGA_ENTRY_COLOR(fg_color, VGA_COLOR_BLACK));
+}
+
+void puts_uint64_fg(uint64_t num, uint8_t fg_color) {
+    uint8_t old_color = current_color;
+    current_color = VGA_ENTRY_COLOR(fg_color, VGA_COLOR_BLACK);
+    puts_uint64(num);
+    current_color = old_color;
+}
+
 uint8_t get_current_color(void) {
     return current_color;
 }

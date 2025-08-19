@@ -14,44 +14,56 @@ extern "C" {
 void run_shell(void *mbi) {
     char input_buffer[256];
     
-    puts("Mini Shell - Available commands:\n");
-    puts("  ticks  - Show system ticks\n");
-    puts("  memory - Show memory information\n");
-    puts("  help   - Show this help\n");
-    puts("shell> ");
+    puts_color("Mini Shell - Available commands:\n", COLOR_INFO);
+    puts("  ");
+    puts_color("ticks", COLOR_SUCCESS);
+    puts("  - Show system ticks\n");
+    puts("  ");
+    puts_color("memory", COLOR_SUCCESS);
+    puts(" - Show memory information\n");
+    puts("  ");
+    puts_color("help", COLOR_SUCCESS);
+    puts("   - Show this help\n");
+    puts_color("shell> ", COLOR_WARNING);
     
     while(1) {
         char* result = gets(input_buffer);
         if (result != NULL) {
             if (strcmp(result, "ticks")) {
-                puts("System ticks: ");
-                puts_uint64(ticks);
+                puts_color("System ticks: ", COLOR_INFO);
+                puts_uint64_fg(ticks, VGA_COLOR_WHITE);
                 puts("\n");
             }
             else if (strcmp(result, "memory")) {
                 uint64_t total_memory = parse_multiboot2_memory_map(mbi);
-                puts("Memory Information:\n");
-                puts("  Total usable: ");
-                puts_uint64(total_memory);
+                puts_color("Memory Information:\n", COLOR_INFO);
+                puts_color("  Total usable: ", COLOR_TEXT);
+                puts_uint64_fg(total_memory, VGA_COLOR_WHITE);
                 puts(" bytes (");
-                puts_uint64(total_memory / 1024);
+                puts_uint64_fg(total_memory / 1024, VGA_COLOR_WHITE);
                 puts(" KB, ");
-                puts_uint64(total_memory / (1024 * 1024));
+                puts_uint64_fg(total_memory / (1024 * 1024), VGA_COLOR_WHITE);
                 puts(" MB)\n");
             }
             else if (strcmp(result, "help")) {
-                puts("Available commands:\n");
-                puts("  ticks  - Show system ticks\n");
-                puts("  memory - Show memory information\n");
-                puts("  help   - Show this help\n");
+                puts_color("Available commands:\n", COLOR_INFO);
+                puts("  ");
+                puts_color("ticks", COLOR_SUCCESS);
+                puts("  - Show system ticks\n");
+                puts("  ");
+                puts_color("memory", COLOR_SUCCESS);
+                puts(" - Show memory information\n");
+                puts("  ");
+                puts_color("help", COLOR_SUCCESS);
+                puts("   - Show this help\n");
             }
             else {
-                puts("Unknown command: ");
-                puts(result);
-                puts("\nType 'help' for available commands\n");
+                puts_color("Unknown command: ", COLOR_ERROR);
+                puts_fg(result, VGA_COLOR_RED);
+                puts_color("\nType 'help' for available commands\n", COLOR_TEXT);
             }
             
-            puts("shell> ");
+            puts_color("shell> ", COLOR_WARNING);
         }
     }
 }
