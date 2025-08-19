@@ -3,7 +3,6 @@
         {
             "name": "Kernel Development",
             "includePath": [
-                "${workspaceFolder}/**",
                 "${workspaceFolder}/src"
             ],
             "defines": [

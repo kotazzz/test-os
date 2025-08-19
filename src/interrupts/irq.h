@@ -3,9 +3,7 @@
 
 #include <stdint.h>
 
-void remap_pic();
-void init_timer(int frequency);
-void init_pic();
-void init_keyboard();
+// Общая инициализация всех IRQ
+void init_irq(void);
 
 #endif
