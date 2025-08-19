@@ -4,6 +4,12 @@
         "stdint.h": "c",
         "stddef.h": "c",
         "input.h": "c",
-        "scancode.h": "c"
+        "scancode.h": "c",
+        "vga.h": "c",
+        "string.h": "c",
+        "multiboot.h": "c",
+        "io.h": "c",
+        "pmm.h": "c",
+        "stdint-gcc.h": "c"
     }
 }

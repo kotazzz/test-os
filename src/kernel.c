@@ -6,6 +6,8 @@
 #include "handlers/timer.h"
 #include "shell.h"
 #include "multiboot/multiboot.h"
+#include "memory/pmm.h"
+#include "memory/vmm.h"
 
 void kmain(void *mbi){
     row = 0;
@@ -20,6 +22,11 @@ void kmain(void *mbi){
     
     // Display multiboot information
     print_multiboot_info(mbi);
+
+    // Initialize memory management
+    puts("Initializing memory management...\n");
+    pmm_init(mbi);  // Physical Memory Manager
+    vmm_init();     // Virtual Memory Manager
 
     // Initialize interrupts
     init_idt();

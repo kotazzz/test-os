@@ -1,5 +1,5 @@
 #include "multiboot.h"
-#include "../vga.h"
+#include "vga.h"
 
 uint64_t parse_multiboot2_memory_map(void *mbi) {
     uint8_t *ptr = (uint8_t*)mbi + 8; // multiboot2: skip total_size + reserved
