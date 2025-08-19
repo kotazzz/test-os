@@ -3,17 +3,35 @@
 #include "../io.h"
 #include "../vga.h"
 
-void timer_handler() {
-    // Простой вывод для проверки - выводим точку каждые 100 тиков
-    static int tick_count = 0;
-    tick_count++;
-    if (tick_count >= 500) {
-        tick_count = 0;
-    }
-    puts_uint64(tick_count);
+void format_time(int seconds) {
+    int hours = seconds / 3600;
+    int minutes = (seconds % 3600) / 60;
+    seconds = seconds % 60;
+    puts("Passed time: ");
+    if (hours < 10) puts("0");
+    puts_uint64(hours);
+    puts(":");
+    if (minutes < 10) puts("0");
+    puts_uint64(minutes);
+    puts(":");
+    if (seconds < 10) puts("0");
+    puts_uint64(seconds);
     puts("\n");
-    outb(0x20, 0x20); // EOI (End of Interrupt)
+    row--;
 }
+
+void timer_handler() {
+    static int tick_count = 0;
+    static int seconds = 0;
+    tick_count++;
+    if (tick_count >= 100) { // 100 тиков = 1 секунда
+        tick_count = 0;
+        seconds++;
+        format_time(seconds);
+    }
+    outb(0x20, 0x20); // EOI
+}
+
 
 void init_timer(int frequency) {
     int divisor = 1193180 / frequency;

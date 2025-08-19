@@ -326,7 +326,7 @@ void kmain(void *mbi){
     // Initialize interrupts (только один раз!)
     init_idt();
     init_pic();
-    init_timer(1); // 10Hz - более безопасная частота
+    init_timer(100);
     
     // Enable interrupts
     __asm__ volatile ("sti");
