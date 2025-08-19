@@ -3,7 +3,8 @@
         {
             "name": "Kernel Development",
             "includePath": [
-                "${workspaceFolder}/**"
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/src"
             ],
             "defines": [
                 "__GNUC__",
