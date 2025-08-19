@@ -10,6 +10,7 @@ CFLAGS   := -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib -mcmodel=la
 CXXFLAGS := $(CFLAGS) -fno-exceptions -fno-rtti
 LDFLAGS  := -T linker.ld -nostdlib -m elf_x86_64
 ASMFLAGS := -f elf64 -w+other
+QEMU_OPTS := -m 256M
 
 SRC_DIR  := src
 BUILD_DIR:= build
@@ -61,7 +62,7 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.s
 
 # Запуск в QEMU
 run: $(ISO_FILE)
-	$(QEMU) -cdrom $(ISO_FILE) -serial stdio
+	$(QEMU) -cdrom $(ISO_FILE) -serial stdio $(QEMU_OPTS)
 
 
 # Очистка
