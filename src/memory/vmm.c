@@ -4,6 +4,8 @@
 #include "std/string.h"
 #include "std/stddef.h"
 
+#define MAX_ORDER 10 // Maximum order for buddy system (2^10 = 1024 pages)
+
 // Current page directory
 static uint64_t current_pml4 = 0;
 
@@ -195,56 +197,153 @@ static uint64_t get_current_cr3(void) {
     return cr3;
 }
 
-// Simple bump allocator for kernel heap
-void *kmalloc(size_t size) {
+// Initialize buddy allocator
+void buddy_init(void) {
+    memset(free_lists, 0, sizeof(free_lists));
+
+    // Try to allocate the largest block, fallback to smaller blocks if needed
+    uint64_t total_pages = 1 << MAX_ORDER;
+    uint64_t base_addr = pmm_alloc_pages(total_pages);
+    if (base_addr) {
+        // Add the block to the largest free list
+        free_lists[MAX_ORDER] = (buddy_block_t *)phys_to_virt(base_addr);
+        free_lists[MAX_ORDER]->next = NULL;
+    } else {
+        puts("WARNING: Failed to allocate large contiguous block, falling back to smaller blocks\n");
+        // Try to allocate as many smaller blocks as possible
+        for (int order = MAX_ORDER - 1; order >= 0; order--) {
+            uint64_t block_size = (1ULL << order);
+            int blocks_added = 0;
+            while (1) {
+                uint64_t addr = pmm_alloc_pages(block_size);
+                if (!addr) break;
+                buddy_block_t *block = (buddy_block_t *)phys_to_virt(addr);
+                block->next = free_lists[order];
+                free_lists[order] = block;
+                blocks_added++;
+            }
+            if (blocks_added > 0) {
+                puts("Buddy order "); puts_uint64(order); puts(": "); puts_uint64(blocks_added); puts(" blocks added\n");
+            }
+        }
+    }
+}
+
+// Allocate memory using buddy system
+void *buddy_alloc(size_t size) {
     if (size == 0) return NULL;
-    
-    // Check if heap is initialized
-    if (kernel_heap_start == 0 || kernel_heap_end == 0) {
-        puts("ERROR: Kernel heap not initialized!\n");
+
+    // Calculate the required order
+    size = align_up(size, PAGE_SIZE);
+    int order = 0;
+    while ((1ULL << order) * PAGE_SIZE < size) {
+        order++;
+    }
+
+    if (order > MAX_ORDER) {
+        puts("ERROR: Requested size too large for buddy allocator\n");
         return NULL;
     }
-    
-    // Align to 8 bytes
-    size = align_up(size, 8);
-    
-    if (kernel_heap_current + size > kernel_heap_end) {
-        puts("Kernel heap exhausted! Requested: "); puts_uint64(size);
-        puts(" bytes, Available: "); puts_uint64(kernel_heap_end - kernel_heap_current);
-        puts(" bytes\n");
-        puts("Current heap pos: 0x"); puts_hex64(kernel_heap_current); puts("\n");
-        puts("Heap end: 0x"); puts_hex64(kernel_heap_end); puts("\n");
+
+    // Find a free block of the required order or higher
+    int current_order = order;
+    while (current_order <= MAX_ORDER && !free_lists[current_order]) {
+        current_order++;
+    }
+
+    if (current_order > MAX_ORDER) {
+        puts("ERROR: Out of memory in buddy allocator\n");
+        puts("Buddy Allocator State:\n");
+        for (int i = 0; i <= MAX_ORDER; i++) {
+            puts("Order "); puts_uint64(i); puts(": ");
+            buddy_block_t *block = free_lists[i];
+            int count = 0;
+            while (block) {
+                count++;
+                block = block->next;
+            }
+            puts_uint64(count); puts(" blocks\n");
+        }
         return NULL;
     }
-    
-    void *ptr = (void*)kernel_heap_current;
-    kernel_heap_current += size;
-    
-    return ptr;
+
+    // Split blocks until the desired order is reached
+    while (current_order > order) {
+        buddy_block_t *block = free_lists[current_order];
+        free_lists[current_order] = block->next;
+
+        current_order--;
+        uint64_t block_addr = (uint64_t)block;
+        uint64_t buddy_addr = block_addr + (1ULL << current_order) * PAGE_SIZE;
+
+        free_lists[current_order] = (buddy_block_t *)phys_to_virt(block_addr);
+        free_lists[current_order]->next = (buddy_block_t *)phys_to_virt(buddy_addr);
+        free_lists[current_order]->next->next = NULL;
+    }
+
+    // Allocate the block
+    buddy_block_t *allocated_block = free_lists[order];
+    free_lists[order] = allocated_block->next;
+    return (void *)allocated_block;
 }
 
-void *kmalloc_aligned(size_t size, size_t alignment) {
-    if (size == 0 || alignment == 0) return NULL;
-    
-    // Align current position to required alignment
-    uint64_t aligned_pos = align_up(kernel_heap_current, alignment);
-    
-    if (aligned_pos + size > kernel_heap_end) {
-        puts("Kernel heap exhausted (aligned allocation)! Requested: "); puts_uint64(size);
-        puts(" bytes with alignment "); puts_uint64(alignment);
-        puts(", Available: "); puts_uint64(kernel_heap_end - aligned_pos);
-        puts(" bytes\n");
-        return NULL;
-    }
-    
-    kernel_heap_current = aligned_pos + size;
-    return (void*)aligned_pos;
-}
+// Free memory using buddy system
+void buddy_free(void *ptr, size_t size) {
+    if (!ptr || size == 0) return;
 
-void kfree(void *ptr) {
-    // Bump allocator doesn't support freeing individual allocations
-    // This would need a proper allocator like a free list or buddy system
-    (void)ptr; // Suppress unused parameter warning
+    // Calculate the order of the block
+    size = align_up(size, PAGE_SIZE);
+    int order = 0;
+    while ((1ULL << order) * PAGE_SIZE < size) {
+        order++;
+    }
+
+    if (order > MAX_ORDER) {
+        puts("ERROR: Invalid size for buddy allocator\n");
+        return;
+    }
+
+    // Add the block back to the free list
+    uint64_t block_addr = (uint64_t)ptr;
+    buddy_block_t *block = (buddy_block_t *)block_addr;
+
+    // Coalesce with buddy blocks if possible
+    while (order < MAX_ORDER) {
+        uint64_t buddy_addr = block_addr ^ ((1ULL << order) * PAGE_SIZE);
+        buddy_block_t *buddy = (buddy_block_t *)buddy_addr;
+
+        // Check if the buddy is free and in the same order
+        buddy_block_t *prev = NULL;
+        buddy_block_t *current = free_lists[order];
+        while (current) {
+            if (current == buddy) {
+                // Remove buddy from free list
+                if (prev) {
+                    prev->next = current->next;
+                } else {
+                    free_lists[order] = current->next;
+                }
+
+                // Merge blocks
+                if (block_addr > buddy_addr) {
+                    block_addr = buddy_addr;
+                }
+                block = (buddy_block_t *)block_addr;
+                order++;
+                break;
+            }
+            prev = current;
+            current = current->next;
+        }
+
+        if (!current) {
+            break; // Buddy not found, stop coalescing
+        }
+    }
+
+    // Add the block to the free list
+    block->next = free_lists[order];
+    free_lists[order] = block;
 }
 
 // Debug function to get kernel heap info
@@ -259,3 +358,44 @@ uint64_t vmm_get_heap_info(uint64_t *start, uint64_t *current, uint64_t *end) {
 bool vmm_is_initialized(void) {
     return current_pml4 != 0 && kernel_heap_start != 0 && kernel_heap_end > kernel_heap_start;
 }
+
+void *kmalloc(size_t size) {
+    return buddy_alloc(size);
+}
+
+typedef struct aligned_alloc_header {
+    void *original_ptr;
+    size_t original_size;
+} aligned_alloc_header_t;
+
+void *kmalloc_aligned(size_t size, size_t alignment) {
+    // Buddy allocator inherently aligns to power-of-two sizes, so we can use it directly
+    if (alignment <= PAGE_SIZE) {
+        return buddy_alloc(size);
+    }
+
+    // For larger alignments, allocate extra space for alignment and header
+    size_t total_size = size + alignment + sizeof(aligned_alloc_header_t);
+    void *raw_ptr = buddy_alloc(total_size);
+    if (!raw_ptr) {
+        return NULL;
+    }
+
+    uintptr_t raw_addr = (uintptr_t)raw_ptr + sizeof(aligned_alloc_header_t);
+    uintptr_t aligned_addr = (raw_addr + alignment - 1) & ~(alignment - 1);
+
+    aligned_alloc_header_t *header = (aligned_alloc_header_t *)(aligned_addr - sizeof(aligned_alloc_header_t));
+    header->original_ptr = raw_ptr;
+    header->original_size = total_size;
+
+    return (void *)aligned_addr;
+}
+
+// Free function for aligned allocations
+void kfree_aligned(void *ptr) {
+    if (!ptr) return;
+    aligned_alloc_header_t *header = (aligned_alloc_header_t *)((uintptr_t)ptr - sizeof(aligned_alloc_header_t));
+    buddy_free(header->original_ptr, header->original_size);
+}
+
+buddy_block_t *free_lists[MAX_ORDER + 1] = {0};

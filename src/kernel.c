@@ -26,6 +26,7 @@ void kmain(void *mbi){
     // Initialize memory management
     puts("Initializing memory management...\n");
     pmm_init(mbi);  // Physical Memory Manager
+    buddy_init();
     vmm_init();     // Virtual Memory Manager
 
     // Initialize interrupts

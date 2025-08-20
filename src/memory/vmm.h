@@ -26,6 +26,15 @@ typedef struct {
     uint64_t entries[512];
 } page_table_t;
 
+// Buddy system parameters
+#define MAX_ORDER 10 // Maximum order for buddy system (2^10 = 1024 pages)
+
+typedef struct buddy_block {
+    struct buddy_block *next;
+} buddy_block_t;
+
+extern buddy_block_t *free_lists[MAX_ORDER + 1];
+
 // VMM functions
 void vmm_init(void);
 bool vmm_map_page(uint64_t virtual_addr, uint64_t physical_addr, uint64_t flags);

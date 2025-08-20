@@ -223,6 +223,34 @@ uint64_t pmm_alloc_page(void) {
     return page_index * PAGE_SIZE;
 }
 
+uint64_t pmm_alloc_pages(uint64_t num_pages) {
+    uint64_t start_page = (uint64_t)-1;
+    uint64_t count = 0;
+
+    for (uint64_t i = 0; i < page_bitmap.total_pages; i++) {
+        if (!bitmap_test(i)) {
+            if (count == 0) {
+                start_page = i;
+            }
+            count++;
+
+            if (count == num_pages) {
+                for (uint64_t j = start_page; j < start_page + num_pages; j++) {
+                    bitmap_set(j);
+                }
+                page_bitmap.used_pages += num_pages;
+                page_bitmap.free_pages -= num_pages;
+                return start_page * PAGE_SIZE;
+            }
+        } else {
+            count = 0;
+        }
+    }
+
+    puts("ERROR: Not enough contiguous pages available!\n");
+    return 0;
+}
+
 void pmm_free_page(uint64_t page_addr) {
     uint64_t page_index = page_addr / PAGE_SIZE;
     

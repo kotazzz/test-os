@@ -76,54 +76,6 @@ static void cmd_pmm_info(void *mbi) {
     puts(" KB\n");
 }
 
-static void cmd_pmm_test(void *mbi) {
-    puts_color("Testing PMM allocation...\n", COLOR_INFO);
-    
-    // Allocate a few pages
-    uint64_t page1 = pmm_alloc_page();
-    uint64_t page2 = pmm_alloc_page();
-    uint64_t page3 = pmm_alloc_page();
-    
-    if (page1 && page2 && page3) {
-        puts_color("Allocated 3 pages:\n", COLOR_SUCCESS);
-        puts("  Page 1: 0x"); puts_hex64(page1); puts("\n");
-        puts("  Page 2: 0x"); puts_hex64(page2); puts("\n");  
-        puts("  Page 3: 0x"); puts_hex64(page3); puts("\n");
-        
-        // Free them
-        pmm_free_page(page1);
-        pmm_free_page(page2);
-        pmm_free_page(page3);
-        puts_color("Pages freed successfully.\n", COLOR_SUCCESS);
-    } else {
-        puts_color("Failed to allocate pages!\n", COLOR_ERROR);
-    }
-}
-
-static void cmd_kmalloc_test(void *mbi) {
-    puts_color("Testing kernel malloc...\n", COLOR_INFO);
-    
-    void *ptr1 = kmalloc(64);
-    void *ptr2 = kmalloc(128);
-    void *ptr3 = kmalloc_aligned(256, 64);
-    
-    if (ptr1 && ptr2 && ptr3) {
-        puts_color("Allocated kernel memory:\n", COLOR_SUCCESS);
-        puts("  ptr1 (64 bytes): 0x"); puts_hex64((uint64_t)ptr1); puts("\n");
-        puts("  ptr2 (128 bytes): 0x"); puts_hex64((uint64_t)ptr2); puts("\n");
-        puts("  ptr3 (256 bytes, 64-aligned): 0x"); puts_hex64((uint64_t)ptr3); puts("\n");
-        
-        // Test writing to memory
-        char *test_str = (char*)ptr1;
-        strcpy(test_str, "Hello from kmalloc!");
-        puts_color("Test string written: ", COLOR_TEXT);
-        puts(test_str); puts("\n");
-        
-    } else {
-        puts_color("Failed to allocate kernel memory!\n", COLOR_ERROR);
-    }
-}
-
 static void cmd_memmap(void *mbi) {
     puts_color("Physical Memory Map:\n", COLOR_INFO);
     pmm_dump_memory_map();
@@ -157,60 +109,123 @@ static void cmd_heap_info(void *mbi) {
     puts_uint64((end - current) / 1024); puts(" KB\n");
 }
 
-// Memory visualization command
-static void cmd_memory_visualization(void *mbi) {
-    puts_color("Memory Visualization:\n", COLOR_INFO);
+static void cmd_test_all(void *mbi) {
+    puts_color("Running all tests:\n", COLOR_INFO);
 
-    uint64_t total_memory = parse_multiboot2_memory_map(mbi);
-    uint64_t used_memory = pmm_get_used_memory();
-    uint64_t free_memory = pmm_get_free_memory();
+    // Test PMM
+    puts_color("[PMM Test]\n", COLOR_INFO);
+    uint64_t page1 = pmm_alloc_page();
+    uint64_t page2 = pmm_alloc_page();
+    uint64_t page3 = pmm_alloc_page();
 
-    puts_color("  Total Memory: ", COLOR_TEXT);
-    puts_uint64_fg(total_memory / (1024 * 1024), VGA_COLOR_WHITE);
-    puts(" MB\n");
+    if (page1 && page2 && page3) {
+        puts_color("  PMM Allocation: SUCCESS\n", COLOR_SUCCESS);
+        puts("    Page 1: 0x"); puts_hex64(page1); puts("\n");
+        puts("    Page 2: 0x"); puts_hex64(page2); puts("\n");
+        puts("    Page 3: 0x"); puts_hex64(page3); puts("\n");
 
-    puts_color("  Used Memory: ", COLOR_TEXT);
-    puts_uint64_fg(used_memory / (1024 * 1024), VGA_COLOR_RED);
-    puts(" MB\n");
-
-    puts_color("  Free Memory: ", COLOR_TEXT);
-    puts_uint64_fg(free_memory / (1024 * 1024), VGA_COLOR_GREEN);
-    puts(" MB\n\n");
-
-    const int block_size = 1024 * 1024; // 1 MB per block
-    const int blocks_per_line = 64;
-    int total_blocks = total_memory / block_size;
-    int used_blocks = used_memory / block_size;
-
-    for (int i = 0; i < total_blocks; i++) {
-        if (i < used_blocks) {
-            puts_bg("_", VGA_COLOR_RED); // Used memory block
-        } else {
-            puts_bg("_", VGA_COLOR_GREEN); // Free memory block
-        }
-
-        if ((i + 1) % blocks_per_line == 0) {
-            puts("\n");
-        }
+        pmm_free_page(page1);
+        pmm_free_page(page2);
+        pmm_free_page(page3);
+        puts_color("  PMM Free: SUCCESS\n", COLOR_SUCCESS);
+    } else {
+        puts_color("  PMM Allocation: FAILED\n", COLOR_ERROR);
     }
 
-    puts("\n");
+    // Test Kernel Malloc
+    puts_color("[Kernel Malloc Test]\n", COLOR_INFO);
+    void *ptr1 = kmalloc(64);
+    void *ptr2 = kmalloc(128);
+    void *ptr3 = kmalloc_aligned(256, 64);
+
+    if (ptr1 && ptr2 && ptr3) {
+        puts_color("  Kernel Malloc: SUCCESS\n", COLOR_SUCCESS);
+        puts("    ptr1 (64 bytes): 0x"); puts_hex64((uint64_t)ptr1); puts("\n");
+        puts("    ptr2 (128 bytes): 0x"); puts_hex64((uint64_t)ptr2); puts("\n");
+        puts("    ptr3 (256 bytes, 64-aligned): 0x"); puts_hex64((uint64_t)ptr3); puts("\n");
+
+        char *test_str = (char*)ptr1;
+        strcpy(test_str, "Hello from kmalloc!");
+        puts_color("    Test string written: ", COLOR_TEXT);
+        puts(test_str); puts("\n");
+    } else {
+        puts_color("  Kernel Malloc: FAILED\n", COLOR_ERROR);
+    }
+
+    // Test Heap Info
+    puts_color("[Kernel Heap Info]\n", COLOR_INFO);
+    uint64_t start, current, end;
+    vmm_get_heap_info(&start, &current, &end);
+
+    if (vmm_is_initialized()) {
+        puts_color("  Heap Info: SUCCESS\n", COLOR_SUCCESS);
+        puts("    Start: 0x"); puts_hex64(start); puts("\n");
+        puts("    Current: 0x"); puts_hex64(current); puts("\n");
+        puts("    End: 0x"); puts_hex64(end); puts("\n");
+        puts("    Total size: "); puts_uint64((end - start) / (1024 * 1024)); puts(" MB\n");
+        puts("    Used: "); puts_uint64((current - start) / 1024); puts(" KB\n");
+        puts("    Available: "); puts_uint64((end - current) / 1024); puts(" KB\n");
+    } else {
+        puts_color("  Heap Info: FAILED (VMM not initialized)\n", COLOR_ERROR);
+    }
+
+    puts_color("All tests completed.\n", COLOR_INFO);
 }
 
-// Command registry
+static void cmd_memory_info(void *mbi) {
+    puts_color("Memory Information:\n", COLOR_INFO);
+
+    // PMM Status
+    puts_color("[Physical Memory Manager]\n", COLOR_INFO);
+    puts_color("  Free memory: ", COLOR_TEXT);
+    puts_uint64_fg(pmm_get_free_memory() / 1024, VGA_COLOR_GREEN);
+    puts(" KB\n");
+    puts_color("  Used memory: ", COLOR_TEXT);
+    puts_uint64_fg(pmm_get_used_memory() / 1024, VGA_COLOR_LIGHT_BROWN);
+    puts(" KB\n");
+
+    // Buddy Allocator Status
+    puts_color("[Buddy Allocator]\n", COLOR_INFO);
+    for (int i = 0; i <= MAX_ORDER; i++) {
+        puts("  Order "); puts_uint64(i); puts(": ");
+        buddy_block_t *block = free_lists[i];
+        int count = 0;
+        while (block) {
+            count++;
+            block = block->next;
+        }
+        puts_uint64(count); puts(" blocks\n");
+    }
+
+    // Kernel Heap Status
+    puts_color("[Kernel Heap]\n", COLOR_INFO);
+    uint64_t start, current, end;
+    vmm_get_heap_info(&start, &current, &end);
+
+    if (vmm_is_initialized()) {
+        puts_color("  Heap Info: SUCCESS\n", COLOR_SUCCESS);
+        puts("    Start: 0x"); puts_hex64(start); puts("\n");
+        puts("    Current: 0x"); puts_hex64(current); puts("\n");
+        puts("    End: 0x"); puts_hex64(end); puts("\n");
+        puts("    Total size: "); puts_uint64((end - start) / (1024 * 1024)); puts(" MB\n");
+        puts("    Used: "); puts_uint64((current - start) / 1024); puts(" KB\n");
+        puts("    Available: "); puts_uint64((end - current) / 1024); puts(" KB\n");
+    } else {
+        puts_color("  Heap Info: FAILED (VMM not initialized)\n", COLOR_ERROR);
+    }
+}
+
+// Update command registry
 static shell_command_t commands[] = {
+    {"test-all", "Run all tests", cmd_test_all},
+    {"memory-info", "Show detailed memory information", cmd_memory_info},
     {"cat", "Show pretty cat", cmd_cat},
     {"random", "Show random number", cmd_random},
     {"ticks", "Show system ticks", cmd_ticks},
     {"memory", "Show memory information", cmd_memory},
-    {"pmm-info", "Show PMM status", cmd_pmm_info},
-    {"pmm-test", "Test PMM allocation", cmd_pmm_test},
-    {"kmalloc-test", "Test kernel malloc", cmd_kmalloc_test},
     {"memmap", "Show physical memory map", cmd_memmap},
-    {"heap-info", "Show kernel heap info", cmd_heap_info},
     {"help", "Show this help", cmd_help},
     {"clear", "Clear the screen", cmd_clear},
-    {"memv", "Visualize memory state", cmd_memory_visualization},
     {nullptr, nullptr, nullptr}
 };
 
