@@ -8,6 +8,9 @@
 #include "multiboot/multiboot.h"
 #include "memory/pmm.h"
 #include "memory/vmm.h"
+#include "process/test_processes.h"
+#include "process/pcb.h"
+#include "process/scheduler.h"
 
 void kmain(void *mbi){
     row = 0;
@@ -29,16 +32,23 @@ void kmain(void *mbi){
     buddy_init();
     vmm_init();     // Virtual Memory Manager
 
+    // Initialize process system
+    puts("Initializing process system...\n");
+    init_process_system();
+
     // Initialize interrupts
+    puts("Initializing interrupts...\n");
     init_idt();
     init_irq();
     
+    puts("Enabling interrupts...\n");
     // Enable interrupts
     __asm__ volatile ("sti");
-
-    puts("Interrupts enabled. System ready.\n");
-    puts("Type something and press Enter:\n");
     
+    puts("Interrupts enabled. System ready.\n");
+    puts("Use 'create' to create processes, 'ps' to list them, 'start' to run scheduler\n");
+    
+    puts("Starting shell...\n");
     // Start the mini shell
     run_shell(mbi);
 }

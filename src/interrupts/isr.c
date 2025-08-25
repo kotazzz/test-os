@@ -14,7 +14,7 @@ void isr_handler(uint8_t n) {
         interrupt_handlers[n]();
     } else {
         puts("Unhandled interrupt: ");
-        puts_uint64(n);
+        puts_hex64(n);
         puts("\n");
     }
 }

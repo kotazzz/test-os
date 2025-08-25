@@ -10,6 +10,7 @@
         "multiboot.h": "c",
         "io.h": "c",
         "pmm.h": "c",
-        "stdint-gcc.h": "c"
+        "stdint-gcc.h": "c",
+        "test_processes.h": "c"
     }
 }

@@ -9,6 +9,9 @@ extern "C" {
     #include "std/random.h"
     #include "memory/pmm.h"
     #include "memory/vmm.h"
+    #include "process/pcb.h"
+    #include "process/scheduler.h" 
+    #include "process/test_processes.h"
 
     // Forward declaration - эта функция остается в kernel.c
     extern uint64_t parse_multiboot2_memory_map(void *mbi);
@@ -215,6 +218,56 @@ static void cmd_memory_info(void *mbi) {
     }
 }
 
+// Process management commands
+static void cmd_ps(void *mbi) {
+    puts_color("Process List:\n", COLOR_INFO);
+    debug_process_table();
+}
+
+static void cmd_create_test(void *mbi) {
+    puts_color("Creating test processes...\n", COLOR_INFO);
+    create_test_processes();
+    puts_color("Test processes created.\n", COLOR_SUCCESS);
+}
+
+static void cmd_start_scheduler(void *mbi) {
+    puts_color("Starting scheduler...\n", COLOR_INFO);
+    start_multitasking();
+}
+
+static void cmd_run_scheduler(void *mbi) {
+    puts_color("Running scheduler once...\n", COLOR_INFO);
+    run_scheduler();
+}
+
+static void cmd_run_process_0(void *mbi) {
+    puts_color("Running process 0...\n", COLOR_INFO);
+    run_process_by_pid(0);
+}
+
+static void cmd_run_process_1(void *mbi) {
+    puts_color("Running process 1...\n", COLOR_INFO);
+    run_process_by_pid(1);
+}
+
+static void cmd_multitask(void *mbi) {
+    puts_color("Starting cooperative multitasking demo...\n", COLOR_INFO);
+    puts_color("Running scheduler in loop (press any key to stop)\n", COLOR_WARNING);
+    
+    // Run scheduler multiple times to see multitasking
+    for (int i = 0; i < 20; i++) {
+        puts("--- Scheduler iteration ");
+        puts_hex64(i);
+        puts(" ---\n");
+        run_scheduler();
+        
+        // Small delay to see what's happening
+        for (volatile int j = 0; j < 1000000; j++);
+    }
+    
+    puts_color("Multitasking demo finished\n", COLOR_SUCCESS);
+}
+
 // Update command registry
 static shell_command_t commands[] = {
     {"test-all", "Run all tests", cmd_test_all},
@@ -224,6 +277,13 @@ static shell_command_t commands[] = {
     {"ticks", "Show system ticks", cmd_ticks},
     {"memory", "Show memory information", cmd_memory},
     {"memmap", "Show physical memory map", cmd_memmap},
+    {"ps", "Show process list", cmd_ps},
+    {"create", "Create test processes", cmd_create_test},
+    {"start", "Start multitasking", cmd_start_scheduler},
+    {"sched", "Run scheduler once", cmd_run_scheduler},
+    {"run0", "Run process 0", cmd_run_process_0},
+    {"run1", "Run process 1", cmd_run_process_1},
+    {"multi", "Cooperative multitasking demo", cmd_multitask},
     {"help", "Show this help", cmd_help},
     {"clear", "Clear the screen", cmd_clear},
     {nullptr, nullptr, nullptr}
