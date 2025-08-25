@@ -1,7 +1,8 @@
 #include "pcb.h"
 #include "scheduler.h"
+#include "../handlers/timer.h" // For disable_multitasking
 #include <stddef.h>
-#include "vga.h"
+#include "../vga.h"
 
 #define MAX_PROCESSES 256
 
@@ -38,8 +39,12 @@ void run_scheduler() {
     } else if (next_process == current) {
         // Same process, call it again for state machine continuation
         switch_context(next_process);
+    } else {
+        // No ready processes - disable automatic multitasking to prevent infinite calls
+        puts_color("No ready processes found - disabling automatic multitasking\n", COLOR_WARNING);
+        extern void disable_multitasking();
+        disable_multitasking();
     }
-    // If no ready processes, just return
 }
 void start_multitasking() {
     pcb_t *first_process = schedule_next();

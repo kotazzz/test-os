@@ -13,6 +13,7 @@ void register_interrupt_handler(uint8_t n, isr_t handler);
 extern void isr_stub_default();
 extern void irq0_handler();
 extern void irq1_handler();
+extern void syscall_entry(); // Точка входа для syscall
 
 // Макрос для легкого добавления новых IRQ обработчиков
 #define DECLARE_IRQ_HANDLER(num) extern void irq##num##_handler();

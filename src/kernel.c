@@ -11,6 +11,8 @@
 #include "process/test_processes.h"
 #include "process/pcb.h"
 #include "process/scheduler.h"
+#include "gdt/gdt.h"
+#include "syscall/syscall.h"
 
 void kmain(void *mbi){
     row = 0;
@@ -36,17 +38,29 @@ void kmain(void *mbi){
     puts("Initializing process system...\n");
     init_process_system();
 
+    // Initialize GDT for user/kernel separation
+    puts("Setting up user/kernel separation...\n");
+    init_gdt();
+    
+    // Initialize system calls
+    init_syscalls();
+
     // Initialize interrupts
     puts("Initializing interrupts...\n");
     init_idt();
     init_irq();
+    
+    // Initialize timer BEFORE enabling interrupts
+    puts("Initializing timer...\n");
+    init_timer(100); // 100 Hz timer
     
     puts("Enabling interrupts...\n");
     // Enable interrupts
     __asm__ volatile ("sti");
     
     puts("Interrupts enabled. System ready.\n");
-    puts("Use 'create' to create processes, 'ps' to list them, 'start' to run scheduler\n");
+    puts("Kernel/User space separation enabled!\n");
+    puts("Use 'create' for kernel processes, 'user-create' for user processes\n");
     
     puts("Starting shell...\n");
     // Start the mini shell

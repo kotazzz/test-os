@@ -33,6 +33,10 @@ void init_idt() {
     
     // Устанавливаем специальный обработчик для IRQ1 (клавиатура)
     set_idt_gate(33, (uint64_t)irq1_handler, 0x08, 0x8E);
+    
+    // Устанавливаем обработчик для системных вызовов (INT 0x80)
+    // Флаги 0xEE: Present, Ring 3, Interrupt Gate
+    set_idt_gate(0x80, (uint64_t)syscall_entry, 0x08, 0xEE);
 
     lidt(&idtp);
 }

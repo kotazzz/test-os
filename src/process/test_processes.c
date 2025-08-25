@@ -66,8 +66,8 @@ void process_b() {
 }
 
 void create_test_processes() {
-    pcb_t* proc_a = create_process(process_a);
-    pcb_t* proc_b = create_process(process_b);
+    pcb_t* proc_a = create_kernel_process(process_a);
+    pcb_t* proc_b = create_kernel_process(process_b);
     
     if (proc_a && proc_b) {
         puts_color("Test processes created successfully\n", COLOR_SUCCESS);

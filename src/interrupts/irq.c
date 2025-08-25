@@ -6,6 +6,5 @@
 // Общая инициализация всех IRQ
 void init_irq() {
     init_pic();
-    init_timer(100); // 100 Hz
     init_keyboard_irq();
 }

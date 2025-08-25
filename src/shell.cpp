@@ -12,6 +12,9 @@ extern "C" {
     #include "process/pcb.h"
     #include "process/scheduler.h" 
     #include "process/test_processes.h"
+    #include "userspace/user_programs.h"
+    #include "gdt/gdt.h"
+    #include "syscall/syscall.h"
 
     // Forward declaration - эта функция остается в kernel.c
     extern uint64_t parse_multiboot2_memory_map(void *mbi);
@@ -274,6 +277,16 @@ static void cmd_auto_multi_off(void *mbi) {
     puts_color("Automatic multitasking DISABLED\n", COLOR_WARNING);
 }
 
+static void cmd_create_user(void *mbi) {
+    puts_color("Creating user space processes...\n", COLOR_INFO);
+    create_user_processes();
+}
+
+static void cmd_test_usermode(void *mbi) {
+    puts_color("Testing user mode switch...\n", COLOR_INFO);
+    switch_to_user_mode();
+}
+
 // Update command registry
 static shell_command_t commands[] = {
     {"test-all", "Run all tests", cmd_test_all},
@@ -292,6 +305,8 @@ static shell_command_t commands[] = {
     {"multi", "Cooperative multitasking demo", cmd_multitask},
     {"auto-on", "Enable automatic multitasking", cmd_auto_multi_on},
     {"auto-off", "Disable automatic multitasking", cmd_auto_multi_off},
+    {"user-create", "Create user space processes", cmd_create_user},
+    {"usermode", "Test user mode switch", cmd_test_usermode},
     {"help", "Show this help", cmd_help},
     {"clear", "Clear the screen", cmd_clear},
     {nullptr, nullptr, nullptr}

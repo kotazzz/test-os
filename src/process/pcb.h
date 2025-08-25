@@ -23,11 +23,16 @@ typedef struct {
     // For cooperative multitasking - process state
     uint32_t process_counter;    // Internal counter for process logic
     uint32_t process_step;       // Current step in process execution
+    
+    // User mode support
+    int is_user_process;         // 1 if process should run in user mode
 } pcb_t;
 
 // Function prototypes
 void init_process_system();
-pcb_t* create_process(void (*entry_point)());
+pcb_t* create_process(void (*entry_point)(), int is_user);
+pcb_t* create_user_process(void (*entry_point)()); // Create process that runs in user mode
+pcb_t* create_kernel_process(void (*entry_point)()); // Create process that runs in kernel mode
 void terminate_process(uint32_t pid);
 void switch_context(pcb_t *next_process);
 pcb_t* get_current_process();
