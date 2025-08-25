@@ -4,31 +4,45 @@
 #include "vga.h"
 
 unsigned long ticks = 0;
+static int multitasking_enabled = 0;
+static int time_slice = 5; // Switch every 5 ticks
 
 void timer_handler() {
     ticks++;
-    // Simple debug - show timer is working (every 50 ticks to avoid spam)
-    // if (ticks % 50 == 0) {
-    //     puts("T");
-    // }
+    
+    // Automatic process switching every time_slice ticks
+    if (multitasking_enabled && (ticks % time_slice == 0)) {
+        extern void run_scheduler();
+        run_scheduler();
+    }
+    
     outb(0x20, 0x20); // EOI (End of Interrupt)
 }
 
+void enable_multitasking() {
+    multitasking_enabled = 1;
+}
+
+void disable_multitasking() {
+    multitasking_enabled = 0;
+}
+
+void set_time_slice(int slice) {
+    if (slice > 0) {
+        time_slice = slice;
+    }
+}
+
 void init_timer(int frequency) {
-    puts("Setting up timer with frequency: ");
+    puts("Setting up timer at ");
     puts_hex64(frequency);
     puts(" Hz\n");
     
     int divisor = 1193180 / frequency;
-    puts("Timer divisor: ");
-    puts_hex64(divisor);
-    puts("\n");
-    
     outb(0x43, 0x36);
     outb(0x40, divisor & 0xFF);
     outb(0x40, (divisor >> 8) & 0xFF);
 
-    puts("Registering timer handler for IRQ 0 (interrupt 32)\n");
     REGISTER_IRQ_HANDLER(0, timer_handler);
-    puts("Timer initialization complete\n");
+    puts("Timer initialized\n");
 }

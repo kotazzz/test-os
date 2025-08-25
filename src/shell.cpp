@@ -252,20 +252,26 @@ static void cmd_run_process_1(void *mbi) {
 
 static void cmd_multitask(void *mbi) {
     puts_color("Starting cooperative multitasking demo...\n", COLOR_INFO);
-    puts_color("Running scheduler in loop (press any key to stop)\n", COLOR_WARNING);
     
     // Run scheduler multiple times to see multitasking
-    for (int i = 0; i < 20; i++) {
-        puts("--- Scheduler iteration ");
-        puts_hex64(i);
-        puts(" ---\n");
+    for (int i = 0; i < 30; i++) {
         run_scheduler();
-        
         // Small delay to see what's happening
-        for (volatile int j = 0; j < 1000000; j++);
+        for (volatile int j = 0; j < 500000; j++);
     }
     
-    puts_color("Multitasking demo finished\n", COLOR_SUCCESS);
+    puts_color("\nMultitasking demo finished\n", COLOR_SUCCESS);
+}
+
+static void cmd_auto_multi_on(void *mbi) {
+    enable_multitasking();
+    puts_color("Automatic multitasking ENABLED\n", COLOR_SUCCESS);
+    puts_color("Processes will switch automatically every 5 timer ticks\n", COLOR_INFO);
+}
+
+static void cmd_auto_multi_off(void *mbi) {
+    disable_multitasking();
+    puts_color("Automatic multitasking DISABLED\n", COLOR_WARNING);
 }
 
 // Update command registry
@@ -284,6 +290,8 @@ static shell_command_t commands[] = {
     {"run0", "Run process 0", cmd_run_process_0},
     {"run1", "Run process 1", cmd_run_process_1},
     {"multi", "Cooperative multitasking demo", cmd_multitask},
+    {"auto-on", "Enable automatic multitasking", cmd_auto_multi_on},
+    {"auto-off", "Disable automatic multitasking", cmd_auto_multi_off},
     {"help", "Show this help", cmd_help},
     {"clear", "Clear the screen", cmd_clear},
     {nullptr, nullptr, nullptr}
