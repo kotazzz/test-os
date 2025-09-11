@@ -11,11 +11,16 @@
 
 // System call handler
 void init_syscalls(void);
-void syscall_handler_main(void); // Переименовано
+void syscall_handler_main(void);
 
-// User space syscall interface
+// User space syscall interface (INT 0x80 version - compatible)
 int syscall_exit(int code);
 int syscall_write(const char* str);
 int syscall_yield(void);
+
+// Fast x64 syscall interface (SYSCALL instruction - optional)
+int syscall_exit_fast(int code);
+int syscall_write_fast(const char* str);
+int syscall_yield_fast(void);
 
 #endif // SYSCALL_H

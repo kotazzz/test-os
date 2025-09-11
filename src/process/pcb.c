@@ -1,10 +1,10 @@
 #include "pcb.h"
 #include <stddef.h>
-#include "std/string.h"
-#include "memory/vmm.h"
-#include "memory/pmm.h"
-#include "vga.h"
-#include "gdt/gdt.h" // For user segment selectors
+#include "../std/string.h"
+#include "../memory/vmm.h"
+#include "../memory/pmm.h"
+#include "../vga.h"
+#include "../gdt/gdt.h" // For user segment selectors
 
 #define MAX_PROCESSES 256
 #define STACK_SIZE 4096  // 4KB stack per process
@@ -40,6 +40,7 @@ pcb_t* create_process(void (*entry_point)(), int is_user) {
             p->is_user_process = is_user;
             p->process_step = 0;
             p->process_counter = 0;
+            p->stack_base = stack_page;  // Save base address for cleanup
             p->stack_pointer = (uint64_t*)(stack_page + STACK_SIZE);
 
             // Setup stack for context switch
@@ -50,16 +51,11 @@ pcb_t* create_process(void (*entry_point)(), int is_user) {
                 // Stack frame for iretq (pushed in reverse order):
                 // SS (Stack Segment), RSP (Stack Pointer), RFLAGS, CS (Code Segment), RIP (Instruction Pointer)
                 
-                // Create a separate user stack - allocate another page for user space
-                uint64_t user_stack_page = pmm_alloc_page();
-                if (user_stack_page == 0) {
-                    puts("Error: Failed to allocate user stack page\n");
-                    return NULL;
-                }
-                uint64_t user_stack_top = user_stack_page + STACK_SIZE - 16; // Leave space and align to 16 bytes
+                // TEMPORARY: Use kernel stack for user process to avoid VM issues
+                uint64_t user_stack_top = (uint64_t)stack - 256; // Use space on kernel stack
                 user_stack_top &= ~0xF; // Ensure 16-byte alignment
                 
-                puts("Setting up user process:\n");
+                puts("Setting up user process (TEMP - using kernel stack):\n");
                 puts("  Entry point: ");
                 puts_hex64((uint64_t)entry_point);
                 puts("\n  Kernel stack base: ");
@@ -117,15 +113,14 @@ pcb_t* create_process(void (*entry_point)(), int is_user) {
 
 void terminate_process(uint32_t pid) {
     if (pid < MAX_PROCESSES && process_table[pid].state != PROCESS_TERMINATED) {
-        // Free the allocated stack
-        if (process_table[pid].stack_pointer) {
-            // Calculate original stack base from current stack pointer
-            uint64_t stack_base = ((uint64_t)process_table[pid].stack_pointer) & ~(STACK_SIZE - 1);
-            pmm_free_page(stack_base);
+        // Free the allocated stack using saved base address
+        if (process_table[pid].stack_base) {
+            pmm_free_page(process_table[pid].stack_base);
         }
         
         process_table[pid].state = PROCESS_TERMINATED;
         process_table[pid].stack_pointer = NULL;
+        process_table[pid].stack_base = 0;
         
         // If terminating current process, clear reference
         if (current_process == &process_table[pid]) {
@@ -136,6 +131,10 @@ void terminate_process(uint32_t pid) {
 
 pcb_t* get_current_process() {
     return current_process;
+}
+
+void set_current_process(pcb_t* process) {
+    current_process = process;
 }
 
 void switch_context(pcb_t *next_process) {
@@ -184,23 +183,6 @@ void switch_context(pcb_t *next_process) {
         puts_hex64(debug_stack[4]);
         puts("\n");
         
-        // TEMPORARY: Skip iretq and just call the function directly to test
-        puts_color("TEMP: Calling user function directly instead of iretq\n", COLOR_WARNING);
-        void (*entry_point)() = (void(*)())debug_stack[0];
-        if (entry_point) {
-            puts_color("TEMP: About to call user function\n", COLOR_INFO);
-            entry_point();
-            puts_color("TEMP: User function returned successfully\n", COLOR_SUCCESS);
-        } else {
-            puts_color("TEMP: No entry point found\n", COLOR_ERROR);
-        }
-        
-        // Terminate the process after execution
-        puts_color("TEMP: Terminating process after execution\n", COLOR_INFO);
-        next_process->state = PROCESS_TERMINATED;
-        current_process = NULL;
-        return;
-        
         // Load user process stack and switch to Ring 3
         __asm__ volatile (
             // Set up user data segments before switching
@@ -224,10 +206,22 @@ void switch_context(pcb_t *next_process) {
         current_process = NULL;
         
     } else {
-        // For kernel processes - call the entry point directly
+        // For kernel processes - set up proper stack and call entry point
         void (*entry_point)() = (void(*)())next_process->registers[15];
         if (entry_point) {
-            entry_point();
+            puts_color("[KERNEL] Switching to kernel process PID ", COLOR_INFO);
+            puts_hex64(next_process->pid);
+            puts("\n");
+            
+            // Set up kernel stack properly
+            __asm__ volatile (
+                "mov %0, %%rsp\n"       // Switch to process stack
+                "call *%1\n"            // Call entry point
+                "int $3\n"              // Breakpoint if process returns (shouldn't happen)
+                :
+                : "r"(next_process->stack_pointer), "r"(entry_point)
+                : "memory"
+            );
         } else {
             puts_color("ERROR: No entry point for kernel process\n", COLOR_ERROR);
             next_process->state = PROCESS_TERMINATED;

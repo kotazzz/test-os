@@ -1,8 +1,9 @@
 #include "isr.h"
 #include "irq.h"
-#include "io.h"
-#include "vga.h"
+#include "../io.h"
+#include "../vga.h"
 #include "../process/pcb.h"
+#include <stddef.h>
 
 static isr_t interrupt_handlers[256];
 
@@ -34,8 +35,24 @@ void isr_handler(uint8_t n) {
                 case 10: puts("Invalid TSS"); break;
                 case 11: puts("Segment Not Present"); break;
                 case 12: puts("Stack Segment Fault"); break;
-                case 13: puts("General Protection Fault"); break;
-                case 14: puts("Page Fault"); break;
+                case 13: 
+                    puts("General Protection Fault");
+                    // For GPF, print error code which is on stack
+                    uint64_t error_code;
+                    __asm__ volatile ("mov 16(%%rbp), %0" : "=r"(error_code));
+                    puts(" (Error Code: ");
+                    puts_hex64(error_code);
+                    puts(")");
+                    break;
+                case 14: 
+                    puts("Page Fault");
+                    // For Page Fault, print CR2 (faulting address)
+                    uint64_t cr2;
+                    __asm__ volatile ("mov %%cr2, %0" : "=r"(cr2));
+                    puts(" (Address: ");
+                    puts_hex64(cr2);
+                    puts(")");
+                    break;
                 default: puts("Unknown Exception"); break;
             }
             puts("\n");
@@ -55,9 +72,17 @@ void isr_handler(uint8_t n) {
                     extern void terminate_process(uint32_t pid);
                     terminate_process(current->pid);
                     
-                    // Switch to next available process or idle
+                    // Clear current process to prevent re-running the same process
+                    extern pcb_t* get_current_process();
+                    extern void set_current_process(pcb_t*);
+                    set_current_process(NULL);
+                    
+                    // Try to switch to next available process
                     extern void run_scheduler();
                     run_scheduler();
+                    
+                    // If scheduler didn't find any process, we're in trouble
+                    puts_color("Warning: No processes available after exception handling\n", COLOR_WARNING);
                     return; // Don't halt the system
                 }
 
@@ -84,57 +109,3 @@ void isr_handler(uint8_t n) {
         }
     }
 }
-
-// Общая функция сохранения контекста
-__asm__(
-    ".macro SAVE_CONTEXT\n"
-    "    push %rax\n"
-    "    push %rbx\n"
-    "    push %rcx\n"
-    "    push %rdx\n"
-    "    push %rsi\n"
-    "    push %rdi\n"
-    "    push %rbp\n"
-    "    push %r8\n"
-    "    push %r9\n"
-    "    push %r10\n"
-    "    push %r11\n"
-    "    push %r12\n"
-    "    push %r13\n"
-    "    push %r14\n"
-    "    push %r15\n"
-    ".endm\n"
-
-    ".macro RESTORE_CONTEXT\n"
-    "    pop %r15\n"
-    "    pop %r14\n"
-    "    pop %r13\n"
-    "    pop %r12\n"
-    "    pop %r11\n"
-    "    pop %r10\n"
-    "    pop %r9\n"
-    "    pop %r8\n"
-    "    pop %rbp\n"
-    "    pop %rdi\n"
-    "    pop %rsi\n"
-    "    pop %rdx\n"
-    "    pop %rcx\n"
-    "    pop %rbx\n"
-    "    pop %rax\n"
-    ".endm\n"
-
-    ".macro ISR_STUB name, int_num\n"
-    ".global \\name\n"
-    "\\name:\n"
-    "    SAVE_CONTEXT\n"
-    "    movq $\\int_num, %rdi\n"
-    "    call isr_handler\n"
-    "    RESTORE_CONTEXT\n"
-    "    iretq\n"
-    ".endm\n"
-
-    // Генерируем заглушки с помощью макросов
-    "ISR_STUB isr_stub_default, 0\n"
-    "ISR_STUB irq0_handler, 32\n"
-    "ISR_STUB irq1_handler, 33\n"
-);

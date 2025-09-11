@@ -17,6 +17,7 @@ typedef struct {
     uint32_t pid;                // Process ID
     process_state_t state;       // Current state of the process
     uint64_t *stack_pointer;     // Pointer to the process's stack (64-bit)
+    uint64_t stack_base;         // Base address of allocated stack for cleanup
     uint64_t *page_directory;    // Pointer to the process's page directory (CR3) (64-bit)
     uint64_t registers[16];      // General-purpose registers (RAX, RBX, RCX, RDX, RSI, RDI, RBP, RSP, R8-R15)
     
@@ -36,6 +37,7 @@ pcb_t* create_kernel_process(void (*entry_point)()); // Create process that runs
 void terminate_process(uint32_t pid);
 void switch_context(pcb_t *next_process);
 pcb_t* get_current_process();
+void set_current_process(pcb_t* process); // Set current process pointer
 void yield(); // Allow process to voluntarily give up CPU
 void debug_process_table(); // Debug function to show process states
 void run_process_by_pid(uint32_t pid); // Run specific process by PID

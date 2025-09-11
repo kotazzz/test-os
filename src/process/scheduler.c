@@ -1,7 +1,7 @@
 #include "pcb.h"
 #include "scheduler.h"
 #include "../handlers/timer.h" // For disable_multitasking
-#include <stddef.h>
+#include "std/stddef.h"
 #include "../vga.h"
 
 #define MAX_PROCESSES 256

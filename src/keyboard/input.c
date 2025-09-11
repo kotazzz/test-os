@@ -1,6 +1,6 @@
 #include "scancode.h"
 #include "input.h"
-#include <stddef.h>
+#include "std/stddef.h"
 
 // Кольцевой буфер для клавиатуры
 #define KEYBOARD_BUFFER_SIZE 256

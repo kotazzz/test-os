@@ -23,9 +23,33 @@ void init_idt() {
     idtp.limit = sizeof(idt) - 1;
     idtp.base = (uint64_t)&idt;
 
-    // Заполняем все дескрипторы дефолтным обработчиком
-    for (int i = 0; i < 256; i++) {
-        set_idt_gate(i, (uint64_t)isr_stub_default, 0x08, 0x8E);
+    // Устанавливаем специализированные обработчики для исключений (0-19)
+    set_idt_gate(0, (uint64_t)isr0, 0x08, 0x8E);   // Division by Zero
+    set_idt_gate(1, (uint64_t)isr1, 0x08, 0x8E);   // Debug
+    set_idt_gate(2, (uint64_t)isr2, 0x08, 0x8E);   // NMI
+    set_idt_gate(3, (uint64_t)isr3, 0x08, 0x8E);   // Breakpoint
+    set_idt_gate(4, (uint64_t)isr4, 0x08, 0x8E);   // Overflow
+    set_idt_gate(5, (uint64_t)isr5, 0x08, 0x8E);   // Bound Range Exceeded
+    set_idt_gate(6, (uint64_t)isr6, 0x08, 0x8E);   // Invalid Opcode
+    set_idt_gate(7, (uint64_t)isr7, 0x08, 0x8E);   // Device Not Available
+    set_idt_gate(8, (uint64_t)isr8, 0x08, 0x8E);   // Double Fault
+    set_idt_gate(9, (uint64_t)isr9, 0x08, 0x8E);   // Coprocessor Segment Overrun
+    set_idt_gate(10, (uint64_t)isr10, 0x08, 0x8E); // Invalid TSS
+    set_idt_gate(11, (uint64_t)isr11, 0x08, 0x8E); // Segment Not Present
+    set_idt_gate(12, (uint64_t)isr12, 0x08, 0x8E); // Stack Segment Fault
+    set_idt_gate(13, (uint64_t)isr13, 0x08, 0x8E); // General Protection Fault
+    set_idt_gate(14, (uint64_t)isr14, 0x08, 0x8E); // Page Fault
+    set_idt_gate(15, (uint64_t)isr15, 0x08, 0x8E); // Reserved
+    set_idt_gate(16, (uint64_t)isr16, 0x08, 0x8E); // x87 FPU Exception
+    set_idt_gate(17, (uint64_t)isr17, 0x08, 0x8E); // Alignment Check
+    set_idt_gate(18, (uint64_t)isr18, 0x08, 0x8E); // Machine Check
+    set_idt_gate(19, (uint64_t)isr19, 0x08, 0x8E); // SIMD Exception
+
+    // Заполняем остальные дескрипторы дефолтным обработчиком
+    for (int i = 20; i < 256; i++) {
+        if (i != 32 && i != 33 && i != 0x80) {  // Кроме IRQ и syscall
+            set_idt_gate(i, (uint64_t)isr_stub_default, 0x08, 0x8E);
+        }
     }
 
     // Устанавливаем специальный обработчик для IRQ0 (таймер)
