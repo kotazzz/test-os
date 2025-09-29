@@ -9,11 +9,11 @@ size_t strlen(const char *str) {
 }
 
 int strcmp(const char *a, const char *b) {
-    while (*a && *b) {
-        if (*a != *b) return 0;
-        a++; b++;
+    while (*a && (*a == *b)) {
+        a++;
+        b++;
     }
-    return (*a == *b);
+    return *(const unsigned char*)a - *(const unsigned char*)b;
 }
 
 char* strcpy(char *dest, const char *src) {

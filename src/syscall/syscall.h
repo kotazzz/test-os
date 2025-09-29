@@ -9,9 +9,16 @@
 #define SYS_READ    2
 #define SYS_YIELD   3
 
+// Register context structure for syscalls
+struct registers {
+    uint64_t r15, r14, r13, r12, r11, r10, r9, r8;
+    uint64_t rdi, rsi, rdx, rcx, rbx, rax;
+    uint64_t rbp;
+};
+
 // System call handler
 void init_syscalls(void);
-void syscall_handler_main(void);
+void syscall_handler_main(struct registers *regs);
 
 // User space syscall interface (INT 0x80 version - compatible)
 int syscall_exit(int code);

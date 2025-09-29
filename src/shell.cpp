@@ -22,9 +22,9 @@ extern "C" {
 
 static void show_help(void);
 
-
 // Show cat
 static void cmd_cat(void *mbi) {
+    (void)mbi;
     puts_color(" _._     _,-'\"\"`-._     \n", COLOR_INFO);
     puts_color("(,-.`._,'(       |\\`-/| \n", COLOR_INFO);
     puts_color("    `-.-' \\ )-`( , o o) \n", COLOR_INFO);
@@ -33,6 +33,7 @@ static void cmd_cat(void *mbi) {
 }
 
 static void cmd_random(void *mbi) {
+    (void)mbi;
     puts_color("Random number: ", COLOR_INFO);
     xorshift_state_t rng;
     xorshift_seed(&rng, ticks);
@@ -42,6 +43,7 @@ static void cmd_random(void *mbi) {
 
 // Command handlers
 static void cmd_ticks(void *mbi) {
+    (void)mbi;
     puts_color("System ticks: ", COLOR_INFO);
     puts_uint64_fg(ticks, VGA_COLOR_WHITE);
     puts("\n");
@@ -60,10 +62,12 @@ static void cmd_memory(void *mbi) {
 }
 
 static void cmd_help(void *mbi) {
+    (void)mbi;
     show_help();
 }
 
 static void cmd_clear(void *mbi) {
+    (void)mbi;
     for (int i = 0; i < 80 * 25; i++) {
         VGA[i] = (' ' | (current_color << 8));
     }
@@ -73,6 +77,7 @@ static void cmd_clear(void *mbi) {
 
 // Memory management commands
 static void cmd_pmm_info(void *mbi) {
+    (void)mbi;
     puts_color("Physical Memory Manager Status:\n", COLOR_INFO);
     puts_color("  Free memory: ", COLOR_TEXT);
     puts_uint64_fg(pmm_get_free_memory() / 1024, VGA_COLOR_GREEN);
@@ -83,6 +88,7 @@ static void cmd_pmm_info(void *mbi) {
 }
 
 static void cmd_memmap(void *mbi) {
+    (void)mbi;
     puts_color("Physical Memory Map:\n", COLOR_INFO);
     pmm_dump_memory_map();
 }
@@ -91,6 +97,7 @@ static void cmd_memmap(void *mbi) {
 extern uint64_t vmm_get_heap_info(uint64_t *start, uint64_t *current, uint64_t *end);
 
 static void cmd_heap_info(void *mbi) {
+    (void)mbi;
     uint64_t start, current, end;
     vmm_get_heap_info(&start, &current, &end);
     
@@ -116,6 +123,7 @@ static void cmd_heap_info(void *mbi) {
 }
 
 static void cmd_test_all(void *mbi) {
+    (void)mbi;
     puts_color("Running all tests:\n", COLOR_INFO);
 
     // Test PMM
@@ -223,37 +231,44 @@ static void cmd_memory_info(void *mbi) {
 
 // Process management commands
 static void cmd_ps(void *mbi) {
+    (void)mbi;
     puts_color("Process List:\n", COLOR_INFO);
     debug_process_table();
 }
 
 static void cmd_create_test(void *mbi) {
+    (void)mbi;
     puts_color("Creating test processes...\n", COLOR_INFO);
     create_test_processes();
     puts_color("Test processes created.\n", COLOR_SUCCESS);
 }
 
 static void cmd_start_scheduler(void *mbi) {
+    (void)mbi;
     puts_color("Starting scheduler...\n", COLOR_INFO);
     start_multitasking();
 }
 
 static void cmd_run_scheduler(void *mbi) {
+    (void)mbi;
     puts_color("Running scheduler once...\n", COLOR_INFO);
     run_scheduler();
 }
 
 static void cmd_run_process_0(void *mbi) {
+    (void)mbi;
     puts_color("Running process 0...\n", COLOR_INFO);
     run_process_by_pid(0);
 }
 
 static void cmd_run_process_1(void *mbi) {
+    (void)mbi;
     puts_color("Running process 1...\n", COLOR_INFO);
     run_process_by_pid(1);
 }
 
 static void cmd_multitask(void *mbi) {
+    (void)mbi;
     puts_color("Starting cooperative multitasking demo...\n", COLOR_INFO);
     
     // Run scheduler multiple times to see multitasking
@@ -267,22 +282,26 @@ static void cmd_multitask(void *mbi) {
 }
 
 static void cmd_auto_multi_on(void *mbi) {
+    (void)mbi;
     enable_multitasking();
     puts_color("Automatic multitasking ENABLED\n", COLOR_SUCCESS);
     puts_color("Processes will switch automatically every 5 timer ticks\n", COLOR_INFO);
 }
 
 static void cmd_auto_multi_off(void *mbi) {
+    (void)mbi;
     disable_multitasking();
     puts_color("Automatic multitasking DISABLED\n", COLOR_WARNING);
 }
 
 static void cmd_create_user(void *mbi) {
+    (void)mbi;
     puts_color("Creating user space processes...\n", COLOR_INFO);
     create_user_processes();
 }
 
 static void cmd_test_usermode(void *mbi) {
+    (void)mbi;
     puts_color("Testing user mode switch...\n", COLOR_INFO);
     switch_to_user_mode();
 }
@@ -335,7 +354,7 @@ void run_shell(void *mbi) {
             // Find and execute command
             bool command_found = false;
             for (int i = 0; commands[i].name != NULL; i++) {
-                if (strcmp(result, commands[i].name)) {
+                if (strcmp(result, commands[i].name) == 0) {
                     commands[i].handler(mbi);
                     command_found = true;
                     break;

@@ -18,7 +18,10 @@ typedef struct {
     process_state_t state;       // Current state of the process
     uint64_t *stack_pointer;     // Pointer to the process's stack (64-bit)
     uint64_t stack_base;         // Base address of allocated stack for cleanup
-    uint64_t *page_directory;    // Pointer to the process's page directory (CR3) (64-bit)
+    uint64_t *page_directory;    // Pointer to the process's page directory (PML4) (64-bit)
+    uint64_t page_directory_phys;// Physical address of PML4 for CR3
+    uint64_t user_stack_virt;    // Virtual address of user stack
+    uint64_t user_stack_phys;    // Physical address of user stack pages
     uint64_t registers[16];      // General-purpose registers (RAX, RBX, RCX, RDX, RSI, RDI, RBP, RSP, R8-R15)
     
     // For cooperative multitasking - process state

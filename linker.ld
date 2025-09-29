@@ -3,6 +3,7 @@ ENTRY(_start)
 SECTIONS
 {
     . = 1M;
+    _kernel_start = .;
 
     /* Keep multiboot2 header in ELF */
     .multiboot2 : ALIGN(8) { KEEP(*(.multiboot2)) }
@@ -11,4 +12,6 @@ SECTIONS
     .rodata : ALIGN(4096) { *(.rodata*) }
     .data : ALIGN(4096) { *(.data*) }
     .bss  : ALIGN(4096) { *(.bss*) *(COMMON) }
+    
+    _kernel_end = .;
 }

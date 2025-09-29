@@ -22,13 +22,6 @@ pcb_t* create_process(void (*entry_point)(), int is_user) {
         if (process_table[i].state == PROCESS_UNINITIALIZED || process_table[i].state == PROCESS_TERMINATED) {
             pcb_t *p = &process_table[i];
 
-            // Allocate stack
-            uint64_t stack_page = pmm_alloc_page();
-            if (stack_page == 0) {
-                puts("Error: Failed to allocate stack page\n");
-                return NULL; // Failed to allocate memory
-            }
-
             if (entry_point == NULL) {
                 puts("Error: Invalid entry point\n");
                 return NULL; // Invalid entry point
@@ -40,69 +33,143 @@ pcb_t* create_process(void (*entry_point)(), int is_user) {
             p->is_user_process = is_user;
             p->process_step = 0;
             p->process_counter = 0;
-            p->stack_base = stack_page;  // Save base address for cleanup
-            p->stack_pointer = (uint64_t*)(stack_page + STACK_SIZE);
-
-            // Setup stack for context switch
-            uint64_t *stack = p->stack_pointer;
             
+            // Clear the new fields
+            p->page_directory = NULL;
+            p->page_directory_phys = 0;
+            p->user_stack_virt = 0;
+            p->user_stack_phys = 0;
+
             if (is_user) {
-                // For user processes, we need to set up for iretq
-                // Stack frame for iretq (pushed in reverse order):
-                // SS (Stack Segment), RSP (Stack Pointer), RFLAGS, CS (Code Segment), RIP (Instruction Pointer)
+                // Create separate address space for user process
+                uint64_t *new_pml4 = vmm_create_address_space();
+                if (!new_pml4) {
+                    puts("Error: Failed to create address space for user process\n");
+                    return NULL;
+                }
                 
-                // TEMPORARY: Use kernel stack for user process to avoid VM issues
-                uint64_t user_stack_top = (uint64_t)stack - 256; // Use space on kernel stack
-                user_stack_top &= ~0xF; // Ensure 16-byte alignment
+                p->page_directory = new_pml4;
+                p->page_directory_phys = (uint64_t)new_pml4;
                 
-                puts("Setting up user process (TEMP - using kernel stack):\n");
+                // Allocate user stack in physical memory
+                uint64_t user_stack_phys = pmm_alloc_page();
+                if (user_stack_phys == 0) {
+                    puts("Error: Failed to allocate user stack page\n");
+                    vmm_destroy_address_space(new_pml4);
+                    return NULL;
+                }
+                p->user_stack_phys = user_stack_phys;
+                
+                // Map user stack to user virtual address space
+                p->user_stack_virt = USER_VIRTUAL_BASE + 0x10000; // User stack at 4MB + 64KB
+                if (!vmm_map_user_page(new_pml4, p->user_stack_virt, user_stack_phys)) {
+                    puts("Error: Failed to map user stack\n");
+                    pmm_free_page(user_stack_phys);
+                    vmm_destroy_address_space(new_pml4);
+                    return NULL;
+                }
+                
+                // Allocate kernel stack for interrupt handling
+                uint64_t kernel_stack_page = pmm_alloc_page();
+                if (kernel_stack_page == 0) {
+                    puts("Error: Failed to allocate kernel stack page\n");
+                    pmm_free_page(user_stack_phys);
+                    vmm_destroy_address_space(new_pml4);
+                    return NULL;
+                }
+                p->stack_base = kernel_stack_page;
+                p->stack_pointer = (uint64_t*)(kernel_stack_page + STACK_SIZE);
+                
+                // Create full interrupt context on kernel stack for context switching
+                uint64_t *stack = p->stack_pointer;
+                uint64_t user_stack_top = p->user_stack_virt + PAGE_SIZE - 16; // Top of user stack, aligned
+                
+                puts("Setting up user process context for context switching:\n");
                 puts("  Entry point: ");
                 puts_hex64((uint64_t)entry_point);
-                puts("\n  Kernel stack base: ");
-                puts_hex64((uint64_t)p->stack_pointer);
-                puts("\n  User stack top (aligned): ");
+                puts("\n  PML4 phys: ");
+                puts_hex64((uint64_t)new_pml4);
+                puts("\n  User stack virt: ");
+                puts_hex64(p->user_stack_virt);
+                puts("\n  User stack top: ");
                 puts_hex64(user_stack_top);
                 puts("\n");
                 
-                // Set up iretq frame on kernel stack (stack points to kernel stack)
-                *--stack = USER_DATA_SEGMENT;    // SS - User data segment (0x23)
-                *--stack = user_stack_top;       // RSP - User stack pointer 
-                *--stack = 0x202;                // RFLAGS - IF=1, IOPL=0 for user mode
-                *--stack = USER_CODE_SEGMENT;    // CS - User code segment (0x1B)
-                *--stack = (uint64_t)entry_point;// RIP - Entry point address
+                // Set up interrupt frame (what CPU pushes during interrupt)
+                *--stack = USER_DATA_SEGMENT;    // SS
+                *--stack = user_stack_top;       // RSP 
+                *--stack = 0x202;                // RFLAGS (IF=1)
+                *--stack = USER_CODE_SEGMENT;    // CS
+                *--stack = (uint64_t)entry_point;// RIP
                 
-                puts("  iretq frame at: ");
-                puts_hex64((uint64_t)stack);
-                puts("\n  Frame contents:\n");
-                puts("    RIP: ");
-                puts_hex64(stack[0]);
-                puts("\n    CS:  ");
-                puts_hex64(stack[1]);
-                puts("\n    RFLAGS: ");
-                puts_hex64(stack[2]);
-                puts("\n    RSP: ");
-                puts_hex64(stack[3]);
-                puts("\n    SS:  ");
-                puts_hex64(stack[4]);
-                puts("\n");
+                // Set up register context (what our context switcher saves/restores)
+                *--stack = 0;                    // RBP
+                *--stack = 0;                    // RAX
+                *--stack = 0;                    // RBX
+                *--stack = 0;                    // RCX
+                *--stack = 0;                    // RDX
+                *--stack = 0;                    // RSI
+                *--stack = 0;                    // RDI
+                *--stack = 0;                    // R8
+                *--stack = 0;                    // R9
+                *--stack = 0;                    // R10
+                *--stack = 0;                    // R11
+                *--stack = 0;                    // R12
+                *--stack = 0;                    // R13
+                *--stack = 0;                    // R14
+                *--stack = 0;                    // R15
+                
+                p->stack_pointer = stack; // Point to saved context
                 
             } else {
-                // For kernel processes, just store entry point for direct call
-                // No stack frame needed - we'll call the function directly
+                // Kernel process - simpler setup
+                uint64_t stack_page = pmm_alloc_page();
+                if (stack_page == 0) {
+                    puts("Error: Failed to allocate stack page\n");
+                    return NULL;
+                }
+                
+                p->stack_base = stack_page;
+                p->stack_pointer = (uint64_t*)(stack_page + STACK_SIZE);
+                p->page_directory = (uint64_t*)vmm_get_current_page_directory();
+                p->page_directory_phys = vmm_get_current_page_directory();
+                
+                // Create kernel interrupt context
+                uint64_t *stack = p->stack_pointer;
+                
+                // Set up interrupt frame for kernel process
+                *--stack = 0x10;                 // SS (kernel data)
+                uint64_t new_rsp = (uint64_t)stack - 40;
+                *--stack = new_rsp;              // RSP (just below interrupt frame)
+                *--stack = 0x202;                // RFLAGS (IF=1)
+                *--stack = 0x08;                 // CS (kernel code)
+                *--stack = (uint64_t)entry_point;// RIP
+                
+                // Set up register context  
+                *--stack = 0;                    // RBP
+                *--stack = 0;                    // RAX
+                *--stack = 0;                    // RBX
+                *--stack = 0;                    // RCX
+                *--stack = 0;                    // RDX
+                *--stack = 0;                    // RSI
+                *--stack = 0;                    // RDI
+                *--stack = 0;                    // R8
+                *--stack = 0;                    // R9
+                *--stack = 0;                    // R10
+                *--stack = 0;                    // R11
+                *--stack = 0;                    // R12
+                *--stack = 0;                    // R13
+                *--stack = 0;                    // R14
+                *--stack = 0;                    // R15
+                
+                p->stack_pointer = stack; // Point to saved context
             }
             
             // Initialize registers to 0
             memset(p->registers, 0, sizeof(p->registers));
             
-            if (is_user) {
-                // For user processes, save the prepared stack with iret frame
-                p->registers[7] = (uint64_t)stack; // RSP pointing to iret frame
-                p->stack_pointer = stack; // Update stack_pointer to point to iret frame
-            } else {
-                // For kernel processes
-                p->registers[7] = (uint64_t)stack; // RSP
-            }
-            p->registers[15] = (uint64_t)entry_point; // Store entry point in register 15
+            // Store entry point
+            p->registers[15] = (uint64_t)entry_point;
             
             return p;
         }
@@ -113,17 +180,31 @@ pcb_t* create_process(void (*entry_point)(), int is_user) {
 
 void terminate_process(uint32_t pid) {
     if (pid < MAX_PROCESSES && process_table[pid].state != PROCESS_TERMINATED) {
+        pcb_t *p = &process_table[pid];
+        
         // Free the allocated stack using saved base address
-        if (process_table[pid].stack_base) {
-            pmm_free_page(process_table[pid].stack_base);
+        if (p->stack_base) {
+            pmm_free_page(p->stack_base);
         }
         
-        process_table[pid].state = PROCESS_TERMINATED;
-        process_table[pid].stack_pointer = NULL;
-        process_table[pid].stack_base = 0;
+        // For user processes, free their address space and user stack
+        if (p->is_user_process && p->page_directory) {
+            if (p->user_stack_phys) {
+                pmm_free_page(p->user_stack_phys);
+            }
+            vmm_destroy_address_space(p->page_directory);
+        }
+        
+        p->state = PROCESS_TERMINATED;
+        p->stack_pointer = NULL;
+        p->stack_base = 0;
+        p->page_directory = NULL;
+        p->page_directory_phys = 0;
+        p->user_stack_virt = 0;
+        p->user_stack_phys = 0;
         
         // If terminating current process, clear reference
-        if (current_process == &process_table[pid]) {
+        if (current_process == p) {
             current_process = NULL;
         }
     }
@@ -151,13 +232,17 @@ void switch_context(pcb_t *next_process) {
 
     if (next_process->is_user_process) {
         // Switch to user mode using iretq
-        // The user process stack is already set up with proper segments and entry point
         
         puts_color("[KERNEL] Switching to user mode process PID ", COLOR_INFO);
         puts_hex64(next_process->pid);
+        puts("\n[KERNEL] Switching to PML4: ");
+        puts_hex64(next_process->page_directory_phys);
         puts("\n[KERNEL] User stack pointer: ");
         puts_hex64((uint64_t)next_process->stack_pointer);
         puts("\n[KERNEL] About to execute iretq...\n");
+        
+        // Load the process's address space
+        vmm_load_page_directory(next_process->page_directory_phys);
         
         // Verify stack is properly aligned and within bounds
         uint64_t stack_addr = (uint64_t)next_process->stack_pointer;
@@ -230,13 +315,21 @@ void switch_context(pcb_t *next_process) {
 }
 
 void yield() {
-    // Allow current process to voluntarily give up CPU
-    extern void run_scheduler();
-    run_scheduler();
+    // Use the new cooperative yield function
+    extern void yield_cooperative(void);
+    yield_cooperative();
 }
 
 void debug_process_table() {
     puts("=== Process Table ===\n");
+    puts("PCB structure offsets:\n");
+    puts("  pid: "); puts_hex64(offsetof(pcb_t, pid)); puts("\n");
+    puts("  state: "); puts_hex64(offsetof(pcb_t, state)); puts("\n");
+    puts("  stack_pointer: "); puts_hex64(offsetof(pcb_t, stack_pointer)); puts("\n");
+    puts("  page_directory_phys: "); puts_hex64(offsetof(pcb_t, page_directory_phys)); puts("\n");
+    puts("  is_user_process: "); puts_hex64(offsetof(pcb_t, is_user_process)); puts("\n");
+    puts("\n");
+    
     int process_count = 0;
     
     for (int i = 0; i < MAX_PROCESSES; i++) {
@@ -253,16 +346,18 @@ void debug_process_table() {
                 case PROCESS_TERMINATED: puts("TERMINATED"); break;
                 default: puts("UNKNOWN("); puts_hex64(process_table[i].state); puts(")"); break;
             }
-            puts(" Stack: ");
+            puts(" KStack: ");
             puts_hex64((uint64_t)process_table[i].stack_pointer);
             puts(" Entry: ");
             puts_hex64(process_table[i].registers[15]);
             puts(" User: ");
             puts_hex64(process_table[i].is_user_process);
-            puts(" Step: ");
-            puts_hex64(process_table[i].process_step);
-            puts(" Counter: ");
-            puts_hex64(process_table[i].process_counter);
+            if (process_table[i].is_user_process) {
+                puts(" PML4: ");
+                puts_hex64(process_table[i].page_directory_phys);
+                puts(" UStack: ");
+                puts_hex64(process_table[i].user_stack_virt);
+            }
             puts("\n");
         }
     }

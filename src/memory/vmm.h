@@ -48,7 +48,8 @@ uint64_t *get_page_table_entry(uint64_t virtual_addr, bool create);
 // Kernel heap functions (simple bump allocator for now)
 void *kmalloc(size_t size);
 void *kmalloc_aligned(size_t size, size_t alignment);
-void kfree(void *ptr); // Will be implemented later
+void kfree(void *ptr); // Free memory allocated by kmalloc
+void kfree_aligned(void *ptr); // Free memory allocated by kmalloc_aligned
 
 // Page directory manipulation
 void vmm_load_page_directory(uint64_t pml4_phys);
@@ -59,5 +60,16 @@ uint64_t vmm_get_heap_info(uint64_t *start, uint64_t *current, uint64_t *end);
 
 // Check if VMM is properly initialized
 bool vmm_is_initialized(void);
+
+// Process address space management
+uint64_t *vmm_create_address_space(void);
+void vmm_destroy_address_space(uint64_t *pml4);
+bool vmm_map_user_page(uint64_t *pml4, uint64_t virtual_addr, uint64_t physical_addr);
+bool vmm_copy_kernel_mappings(uint64_t *dest_pml4);
+
+// Buddy Allocator functions
+void buddy_init(void);
+void *buddy_alloc(size_t size);
+void buddy_free(void *ptr, size_t size);
 
 #endif // VMM_H

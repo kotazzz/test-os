@@ -2,14 +2,12 @@
 CC       := x86_64-elf-gcc.exe
 CXX      := x86_64-elf-g++.exe
 LD       := x86_64-elf-ld.exe
-ASM      := nasm.exe
 QEMU     := qemu-system-x86_64.exe
 GRUB     := grub-mkrescue
 
 CFLAGS   := -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib -mcmodel=large -mno-sse -MMD -MP -Isrc
 CXXFLAGS := $(CFLAGS) -fno-exceptions -fno-rtti
 LDFLAGS  := -T linker.ld -nostdlib -m elf_x86_64
-ASMFLAGS := -f elf64 -w+other
 QEMU_OPTS := -m 256M
 
 SRC_DIR  := src
@@ -20,9 +18,9 @@ ISO_DIR  := iso
 KERNEL   := $(BUILD_DIR)/kernel.elf
 ISO_FILE := $(DIST_DIR)/myos.iso
 
-C_SOURCES    := $(shell find $(SRC_DIR) -name '*.c')
-CPP_SOURCES  := $(shell find $(SRC_DIR) -name '*.cpp')
-ASM_SOURCES  := $(shell find $(SRC_DIR) -name '*.s')
+C_SOURCES    := $(shell /usr/bin/find $(SRC_DIR) -name '*.c')
+CPP_SOURCES  := $(shell /usr/bin/find $(SRC_DIR) -name '*.cpp')
+ASM_SOURCES  := $(shell /usr/bin/find $(SRC_DIR) -name '*.s')
 
 C_OBJS   := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(C_SOURCES))
 CPP_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(CPP_SOURCES))
@@ -55,10 +53,10 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# Ассемблер
+# Ассемблер (использует GCC для совместимости с AT&T синтаксисом)
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.s
 	@mkdir -p $(dir $@)
-	$(ASM) $(ASMFLAGS) $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
 # Запуск в QEMU
 run: $(ISO_FILE)

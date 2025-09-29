@@ -2,6 +2,7 @@
 #include "scancode.h"
 #include "input.h"
 #include "interrupts/isr_macros.h"
+#include "interrupts/isr.h"
 #include "io.h"
 #include "vga.h"
 

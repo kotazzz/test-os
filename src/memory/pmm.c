@@ -4,6 +4,10 @@
 #include "std/string.h"
 #include "std/stddef.h"
 
+// Symbols from linker.ld
+extern uint8_t _kernel_start[];
+extern uint8_t _kernel_end[];
+
 // Global PMM state
 static page_bitmap_t page_bitmap = {0};
 static memory_region_t *memory_regions = NULL;
@@ -120,13 +124,14 @@ void pmm_init(void *multiboot_info) {
     page_bitmap.total_pages = align_up(highest_addr, PAGE_SIZE) / PAGE_SIZE;
 
     // Find a place for bitmap (use physical address directly for now)
-    kernel_end = 0x200000; // 2MB
+    kernel_end = (uint64_t)_kernel_end; // Get real kernel end from linker
     uint64_t bitmap_size = (page_bitmap.total_pages + 7) / 8; // Round up to bytes
     uint64_t bitmap_addr = align_up(kernel_end, PAGE_SIZE);
 
     page_bitmap.bitmap = (uint8_t*)bitmap_addr;
 
     // Debug output
+    puts("Kernel end address: 0x"); puts_hex64(kernel_end); puts("\n");
     puts("Total pages to manage: "); puts_uint64(page_bitmap.total_pages); puts("\n");
     puts("Bitmap size: "); puts_uint64(bitmap_size); puts(" bytes\n");
     puts("Bitmap location: 0x"); puts_hex64(bitmap_addr); puts("\n");

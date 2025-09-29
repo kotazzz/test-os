@@ -34,6 +34,7 @@ typedef struct memory_region {
 // PMM functions
 void pmm_init(void *multiboot_info);
 uint64_t pmm_alloc_page(void);
+uint64_t pmm_alloc_pages(uint64_t num_pages);
 void pmm_free_page(uint64_t page_addr);
 uint64_t pmm_get_free_memory(void);
 uint64_t pmm_get_used_memory(void);

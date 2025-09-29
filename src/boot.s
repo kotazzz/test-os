@@ -1,184 +1,182 @@
-%define STACK_SIZE 16384
+#define STACK_SIZE 16384
 
-section .multiboot2
-align 8
-header_length equ multiboot_header_end - multiboot_header_start
-
+.section .multiboot2, "a"
+.align 8
 multiboot_header_start:
-    dd 0xE85250D6        ; magic
-    dd 0                 ; architecture (0 = i386)
-    dd header_length
-    dd -(0xE85250D6 + 0 + header_length)
-    ; End tag
-    dw 0
-    dw 0
-    dd 8
+    .long 0xE85250D6        # magic
+    .long 0                 # architecture (0 = i386)
+    .long multiboot_header_end - multiboot_header_start # header_length
+    .long -(0xE85250D6 + 0 + (multiboot_header_end - multiboot_header_start)) # checksum
+    # End tag
+    .word 0
+    .word 0
+    .long 8
 multiboot_header_end:
 
-section .bss
-align 16
+.section .bss
+.align 16
 stack_bottom:
-    resb STACK_SIZE
+    .space 16384
 stack_top:
 
-; Page tables for long mode
-align 4096
+# Page tables for long mode
+.align 4096
 p4_table:
-    resb 4096
+    .space 4096
 p3_table:
-    resb 4096
+    .space 4096
 p2_table:
-    resb 4096
+    .space 4096
 
-section .rodata
+.section .rodata
 gdt64:
-    dq 0x0000000000000000    ; null descriptor
-.code: equ $ - gdt64
-    dq 0x00209A0000000000    ; 64-bit code segment (L=1, P=1, DPL=0, Type=1010)
-.data: equ $ - gdt64  
-    dq 0x0000920000000000    ; 64-bit data segment
-.pointer:
-    dw $ - gdt64 - 1         ; length
-    dq gdt64                 ; address
+    .quad 0x0000000000000000    # null descriptor
+gdt64_code:
+    .quad 0x00209A0000000000    # 64-bit code segment (L=1, P=1, DPL=0, Type=1010)
+gdt64_data:
+    .quad 0x0000920000000000    # 64-bit data segment
+gdt64_pointer:
+    .word . - gdt64 - 1         # length
+    .quad gdt64                 # address
 
-section .text
-bits 32
-global _start
-extern kmain
+.section .text
+.code32
+.global _start
+.extern kmain
 
 _start:
     cli
-    mov esp, stack_top
+    movl $stack_top, %esp
 
-    ; Save multiboot2 info pointer from EBX
-    mov edi, ebx  ; Save MBI pointer in EDI (preserved across calls)
+    # Save multiboot2 info pointer from EBX
+    movl %ebx, %edi  # Save MBI pointer in EDI (preserved across calls)
 
-    ; Check multiboot2
-    cmp eax, 0x36d76289
+    # Check multiboot2
+    cmpl $0x36d76289, %eax
     jne .no_multiboot
-    
-    ; Check CPUID support
+
+    # Check CPUID support
     call check_cpuid
     call check_long_mode
-    
-    ; Set up paging
+
+    # Set up paging
     call setup_page_tables
     call enable_paging
-    
-    ; Load GDT
-    lgdt [gdt64.pointer]
-    
-    ; Jump to long mode with far jump
-    jmp gdt64.code:long_mode_start
-    
+
+    # Load GDT
+    lgdt gdt64_pointer
+
+    # Jump to long mode with far jump
+    ljmp $8, $long_mode_start
+
 .no_multiboot:
-    mov al, "0"
+    movb $'0', %al
     jmp error
 
 check_cpuid:
-    pushfd
-    pop eax
-    mov ecx, eax
-    xor eax, 1 << 21
-    push eax
-    popfd
-    pushfd
-    pop eax
-    push ecx
-    popfd
-    xor eax, ecx
+    pushf
+    popl %eax
+    movl %eax, %ecx
+    xorl $(1 << 21), %eax
+    pushl %eax
+    popf
+    pushf
+    popl %eax
+    pushl %ecx
+    popf
+    xorl %ecx, %eax
     jz .no_cpuid
     ret
 .no_cpuid:
-    mov al, "1"
+    movb $'1', %al
     jmp error
 
 check_long_mode:
-    mov eax, 0x80000000
+    movl $0x80000000, %eax
     cpuid
-    cmp eax, 0x80000001
+    cmpl $0x80000001, %eax
     jb .no_long_mode
-    
-    mov eax, 0x80000001
+
+    movl $0x80000001, %eax
     cpuid
-    test edx, 1 << 29
+    testl $(1 << 29), %edx
     jz .no_long_mode
     ret
 .no_long_mode:
-    mov al, "2"
+    movb $'2', %al
     jmp error
 
 setup_page_tables:
-    ; Map first P4 entry to P3 table
-    mov eax, p3_table
-    or eax, 0b11        ; present + writable
-    mov [p4_table], eax
-    
-    ; Map first P3 entry to P2 table
-    mov eax, p2_table
-    or eax, 0b11        ; present + writable
-    mov [p3_table], eax
-    
-    ; Map each P2 entry to a huge 2MiB page
-    mov ecx, 0
+    # Map first P4 entry to P3 table
+    movl $p3_table, %eax
+    orl $0b11, %eax        # present + writable
+    movl %eax, p4_table
+
+    # Map first P3 entry to P2 table
+    movl $p2_table, %eax
+    orl $0b11, %eax        # present + writable
+    movl %eax, p3_table
+
+    # Map each P2 entry to a huge 2MiB page
+    movl $0, %ecx
 .map_p2_table:
-    mov eax, 0x200000
-    mul ecx
-    or eax, 0b10000011  ; present + writable + huge
-    mov [p2_table + ecx * 8], eax
-    inc ecx
-    cmp ecx, 512
+    movl $0x200000, %eax
+    mull %ecx
+    orl $0b10000011, %eax  # present + writable + huge
+    movl %eax, p2_table(,%ecx,8)
+    incl %ecx
+    cmpl $512, %ecx
     jne .map_p2_table
     ret
 
 enable_paging:
-    ; Load P4 to cr3 register
-    mov eax, p4_table
-    mov cr3, eax
-    
-    ; Enable PAE flag in cr4
-    mov eax, cr4
-    or eax, 1 << 5
-    mov cr4, eax
-    
-    ; Set the long mode bit in EFER MSR
-    mov ecx, 0xC0000080
+    # Load P4 to cr3 register
+    movl $p4_table, %eax
+    movl %eax, %cr3
+
+    # Enable PAE flag in cr4
+    movl %cr4, %eax
+    orl $(1 << 5), %eax
+    movl %eax, %cr4
+
+    # Set the long mode bit in EFER MSR
+    movl $0xC0000080, %ecx
     rdmsr
-    or eax, 1 << 8
+    orl $(1 << 8), %eax
     wrmsr
-    
-    ; Enable paging in cr0 register
-    mov eax, cr0
-    or eax, 1 << 31
-    mov cr0, eax
+
+    # Enable paging in cr0 register
+    movl %cr0, %eax
+    orl $(1 << 31), %eax
+    movl %eax, %cr0
     ret
 
 error:
-    mov dword [0xb8000], 0x4f524f45
-    mov dword [0xb8004], 0x4f3a4f52
-    mov dword [0xb8008], 0x4f204f20
-    mov byte [0xb800a], al
+    movl $0x4f524f45, 0xb8000
+    movl $0x4f3a4f52, 0xb8004
+    movl $0x4f204f20, 0xb8008
+    movb %al, 0xb800a
     hlt
 
-bits 64
+.code64
 long_mode_start:
-    ; Load data segment registers
-    mov ax, gdt64.data
-    mov ss, ax
-    mov ds, ax
-    mov es, ax
-    mov fs, ax
-    mov gs, ax
+    # Load data segment registers
+    movw $16, %ax
+    movw %ax, %ss
+    movw %ax, %ds
+    movw %ax, %es
+    movw %ax, %fs
+    movw %ax, %gs
+
+    # Set up stack
+    movq $stack_top, %rsp
+
+    # Pass multiboot2 info pointer as first argument (RDI in x86-64 calling convention)
+    # RDI already contains the value from EDI
     
-    ; Set up stack
-    mov rsp, stack_top
-    
-    ; Pass multiboot2 info pointer as first argument (RDI in x86-64 calling convention)
-    ; EDI was saved in 32-bit mode, now it's automatically extended to RDI
-    
-    ; Call kernel
+    # Call kernel
     call kmain
-    
+
 .halt:
     hlt
     jmp .halt

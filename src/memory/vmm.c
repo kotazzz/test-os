@@ -359,8 +359,49 @@ bool vmm_is_initialized(void) {
     return current_pml4 != 0 && kernel_heap_start != 0 && kernel_heap_end > kernel_heap_start;
 }
 
+// Header for kmalloc allocations to track size
+typedef struct kmalloc_header {
+    size_t size;
+    uint64_t magic; // For corruption detection
+} kmalloc_header_t;
+
+#define KMALLOC_MAGIC 0xDEADBEEFCAFEBABEULL
+
 void *kmalloc(size_t size) {
-    return buddy_alloc(size);
+    if (size == 0) return NULL;
+    
+    // Allocate space for header + requested size
+    size_t total_size = sizeof(kmalloc_header_t) + size;
+    void *raw_ptr = buddy_alloc(total_size);
+    
+    if (!raw_ptr) return NULL;
+    
+    // Set up header
+    kmalloc_header_t *header = (kmalloc_header_t *)raw_ptr;
+    header->size = total_size;
+    header->magic = KMALLOC_MAGIC;
+    
+    // Return pointer after header
+    return (void *)((uint8_t *)raw_ptr + sizeof(kmalloc_header_t));
+}
+
+void kfree(void *ptr) {
+    if (!ptr) return;
+    
+    // Get header from pointer
+    kmalloc_header_t *header = (kmalloc_header_t *)((uint8_t *)ptr - sizeof(kmalloc_header_t));
+    
+    // Verify magic number for corruption detection
+    if (header->magic != KMALLOC_MAGIC) {
+        puts("ERROR: kfree - corrupted block or invalid pointer\n");
+        return;
+    }
+    
+    // Clear magic to detect double-free
+    header->magic = 0;
+    
+    // Free the block
+    buddy_free((void *)header, header->size);
 }
 
 typedef struct aligned_alloc_header {
@@ -396,6 +437,76 @@ void kfree_aligned(void *ptr) {
     if (!ptr) return;
     aligned_alloc_header_t *header = (aligned_alloc_header_t *)((uintptr_t)ptr - sizeof(aligned_alloc_header_t));
     buddy_free(header->original_ptr, header->original_size);
+}
+
+// Create a new address space (PML4) for a process
+uint64_t *vmm_create_address_space(void) {
+    // Allocate a page for the new PML4
+    uint64_t pml4_phys = pmm_alloc_page();
+    if (pml4_phys == 0) {
+        return NULL;
+    }
+
+    // Clear the PML4 table
+    page_table_t *pml4 = (page_table_t *)pml4_phys;
+    memset(pml4, 0, sizeof(page_table_t));
+
+    // Copy kernel mappings (upper half of address space)
+    if (!vmm_copy_kernel_mappings((uint64_t *)pml4_phys)) {
+        pmm_free_page(pml4_phys);
+        return NULL;
+    }
+
+    return (uint64_t *)pml4_phys;
+}
+
+// Copy kernel mappings to a new address space
+bool vmm_copy_kernel_mappings(uint64_t *dest_pml4_phys) {
+    page_table_t *dest_pml4 = (page_table_t *)dest_pml4_phys;
+    page_table_t *src_pml4 = (page_table_t *)current_pml4;
+
+    // Copy upper half entries (kernel space) - entries 256-511
+    for (int i = 256; i < 512; i++) {
+        dest_pml4->entries[i] = src_pml4->entries[i];
+    }
+
+    return true;
+}
+
+// Map a page in user space with user permissions
+bool vmm_map_user_page(uint64_t *pml4_phys, uint64_t virtual_addr, uint64_t physical_addr) {
+    // Temporarily switch to the target address space
+    uint64_t old_cr3 = vmm_get_current_page_directory();
+    vmm_load_page_directory((uint64_t)pml4_phys);
+
+    // Map the page with user permissions
+    bool result = vmm_map_page(virtual_addr, physical_addr, PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
+
+    // Switch back to original address space
+    vmm_load_page_directory(old_cr3);
+
+    return result;
+}
+
+// Destroy an address space and free all associated pages
+void vmm_destroy_address_space(uint64_t *pml4_phys) {
+    if (!pml4_phys) return;
+
+    page_table_t *pml4 = (page_table_t *)pml4_phys;
+    
+    // Free user space page tables (entries 0-255)
+    // Note: This is a simplified implementation - a full implementation would
+    // need to recursively free all page tables and user pages
+    for (int i = 0; i < 256; i++) {
+        if (pml4->entries[i] & PAGE_PRESENT) {
+            // For now, just clear the entries
+            // A full implementation should recursively free PDPT, PD, and PT tables
+            pml4->entries[i] = 0;
+        }
+    }
+
+    // Free the PML4 itself
+    pmm_free_page((uint64_t)pml4_phys);
 }
 
 buddy_block_t *free_lists[MAX_ORDER + 1] = {0};

@@ -8,9 +8,8 @@
 __asm__(
     ".global syscall_entry\n"
     "syscall_entry:\n"
-    // Сохраняем контекст (все 64-битные регистры)
+    // Сохраняем контекст (все 64-битные регистры в том порядке, как они определены в структуре registers)
     "    pushq %rbp\n"
-    "    movq %rsp, %rbp\n"
     "    pushq %rax\n"    // Syscall number
     "    pushq %rbx\n"
     "    pushq %rcx\n"
@@ -26,13 +25,19 @@ __asm__(
     "    pushq %r14\n"
     "    pushq %r15\n"
     
+    // Передаем указатель на сохраненный контекст как первый аргумент
+    "    movq %rsp, %rdi\n"
+    
     // Выравнивание стека на 16 байт (требование x64 ABI)
+    "    pushq %rsp\n"    // Сохраняем текущий RSP
     "    andq $-16, %rsp\n"
     
     "    call syscall_handler_main\n" // Вызываем C-обработчик
     
-    // Восстанавливаем контекст
-    "    movq %rbp, %rsp\n"
+    // Восстанавливаем выравненный стек
+    "    popq %rsp\n"
+    
+    // Восстанавливаем контекст (порядок обратный сохранению)
     "    popq %r15\n"
     "    popq %r14\n"
     "    popq %r13\n"
@@ -52,19 +57,12 @@ __asm__(
 );
 
 // C-функция обработчика syscall
-void syscall_handler_main(void) {
-    uint64_t syscall_num, arg1, arg2, arg3, result = 0;
-    
-    // Получаем аргументы syscall из регистров (x64 calling convention)
-    __asm__ volatile (
-        "movq %%rax, %0\n"     // syscall number
-        "movq %%rdi, %1\n"     // arg1 
-        "movq %%rsi, %2\n"     // arg2
-        "movq %%rdx, %3\n"     // arg3
-        : "=r"(syscall_num), "=r"(arg1), "=r"(arg2), "=r"(arg3)
-        :
-        : "memory"
-    );
+void syscall_handler_main(struct registers *regs) {
+    uint64_t syscall_num = regs->rax;
+    uint64_t arg1 = regs->rdi;
+    // uint64_t arg2 = regs->rsi; // Reserved for future use
+    // uint64_t arg3 = regs->rdx; // Reserved for future use
+    uint64_t result = 0;
     
     switch(syscall_num) {
         case SYS_EXIT:
@@ -91,8 +89,8 @@ void syscall_handler_main(void) {
             break;
     }
     
-    // Возвращаем результат в RAX
-    __asm__ volatile ("movq %0, %%rax" : : "r"(result) : "rax");
+    // Возвращаем результат в RAX через структуру регистров
+    regs->rax = result;
 }
 
 void init_syscalls(void) {

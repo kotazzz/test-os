@@ -30,6 +30,11 @@ pcb_t* schedule_next() {
     return NULL; // No ready processes
 }
 
+// Alias for the context switching system
+pcb_t* get_next_process(void) {
+    return schedule_next();
+}
+
 void run_scheduler() {
     pcb_t *current = get_current_process();
     pcb_t *next_process = schedule_next();
