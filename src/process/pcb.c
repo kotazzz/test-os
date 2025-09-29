@@ -218,101 +218,7 @@ void set_current_process(pcb_t* process) {
     current_process = process;
 }
 
-void switch_context(pcb_t *next_process) {
-    if (!next_process || next_process->state == PROCESS_TERMINATED) {
-        return;
-    }
-    
-    if (current_process && current_process->state == PROCESS_RUNNING) {
-        current_process->state = PROCESS_READY;
-    }
 
-    current_process = next_process;
-    current_process->state = PROCESS_RUNNING;
-
-    if (next_process->is_user_process) {
-        // Switch to user mode using iretq
-        
-        puts_color("[KERNEL] Switching to user mode process PID ", COLOR_INFO);
-        puts_hex64(next_process->pid);
-        puts("\n[KERNEL] Switching to PML4: ");
-        puts_hex64(next_process->page_directory_phys);
-        puts("\n[KERNEL] User stack pointer: ");
-        puts_hex64((uint64_t)next_process->stack_pointer);
-        puts("\n[KERNEL] About to execute iretq...\n");
-        
-        // Load the process's address space
-        vmm_load_page_directory(next_process->page_directory_phys);
-        
-        // Verify stack is properly aligned and within bounds
-        uint64_t stack_addr = (uint64_t)next_process->stack_pointer;
-        if (stack_addr == 0 || (stack_addr & 0x7) != 0) {
-            puts_color("ERROR: Invalid stack pointer for user process!\n", COLOR_ERROR);
-            next_process->state = PROCESS_TERMINATED;
-            current_process = NULL;
-            return;
-        }
-        
-        // Debug: Print the entire iretq frame
-        uint64_t *debug_stack = next_process->stack_pointer;
-        puts("iretq frame contents:\n");
-        puts("  [0] RIP: ");
-        puts_hex64(debug_stack[0]);
-        puts("\n  [1] CS:  ");
-        puts_hex64(debug_stack[1]);  
-        puts("\n  [2] RFLAGS: ");
-        puts_hex64(debug_stack[2]);
-        puts("\n  [3] RSP: ");
-        puts_hex64(debug_stack[3]);
-        puts("\n  [4] SS:  ");
-        puts_hex64(debug_stack[4]);
-        puts("\n");
-        
-        // Load user process stack and switch to Ring 3
-        __asm__ volatile (
-            // Set up user data segments before switching
-            "mov $0x23, %%ax\n"        // User data segment (Ring 3)
-            "mov %%ax, %%ds\n"
-            "mov %%ax, %%es\n"
-            "mov %%ax, %%fs\n"
-            "mov %%ax, %%gs\n"
-            
-            // Switch to user stack and mode using the prepared iret frame
-            "mov %0, %%rsp\n"          // Load stack pointer to iret frame
-            "iretq\n"                  // Return to user mode (Ring 3)
-            :
-            : "r"(next_process->stack_pointer)  // Use stack_pointer, not registers[7]
-            : "memory"
-        );
-        
-        // This code should never be reached - user mode will use syscalls to return
-        puts_color("ERROR: Returned from user mode unexpectedly!\n", COLOR_ERROR);
-        next_process->state = PROCESS_TERMINATED;
-        current_process = NULL;
-        
-    } else {
-        // For kernel processes - set up proper stack and call entry point
-        void (*entry_point)() = (void(*)())next_process->registers[15];
-        if (entry_point) {
-            puts_color("[KERNEL] Switching to kernel process PID ", COLOR_INFO);
-            puts_hex64(next_process->pid);
-            puts("\n");
-            
-            // Set up kernel stack properly
-            __asm__ volatile (
-                "mov %0, %%rsp\n"       // Switch to process stack
-                "call *%1\n"            // Call entry point
-                "int $3\n"              // Breakpoint if process returns (shouldn't happen)
-                :
-                : "r"(next_process->stack_pointer), "r"(entry_point)
-                : "memory"
-            );
-        } else {
-            puts_color("ERROR: No entry point for kernel process\n", COLOR_ERROR);
-            next_process->state = PROCESS_TERMINATED;
-        }
-    }
-}
 
 void yield() {
     // Use the new cooperative yield function
@@ -322,9 +228,7 @@ void yield() {
 
 void debug_process_table() {
     puts("=== Process Table ===\n");
-    puts("PCB structure offsets:\n");
-    puts("  pid: "); puts_hex64(offsetof(pcb_t, pid)); puts("\n");
-    puts("  state: "); puts_hex64(offsetof(pcb_t, state)); puts("\n");
+    puts("PCB structure offsets (for assembly):\n");
     puts("  stack_pointer: "); puts_hex64(offsetof(pcb_t, stack_pointer)); puts("\n");
     puts("  page_directory_phys: "); puts_hex64(offsetof(pcb_t, page_directory_phys)); puts("\n");
     puts("  is_user_process: "); puts_hex64(offsetof(pcb_t, is_user_process)); puts("\n");
@@ -376,11 +280,17 @@ void debug_process_table() {
 }
 
 void run_process_by_pid(uint32_t pid) {
-    if (pid >= MAX_PROCESSES || process_table[pid].state != PROCESS_READY) {
+    if (pid >= MAX_PROCESSES || (process_table[pid].state != PROCESS_READY && process_table[pid].state != PROCESS_UNINITIALIZED)) {
         return;
     }
     
-    switch_context(&process_table[pid]);
+    pcb_t *proc = &process_table[pid];
+    
+    set_current_process(proc);
+    proc->state = PROCESS_RUNNING;
+
+    extern void restore_next_context(pcb_t*);
+    restore_next_context(proc); // This will start the process and not return
 }
 
 pcb_t* create_user_process(void (*entry_point)()) {

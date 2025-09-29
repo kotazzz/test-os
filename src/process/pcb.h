@@ -38,7 +38,6 @@ pcb_t* create_process(void (*entry_point)(), int is_user);
 pcb_t* create_user_process(void (*entry_point)()); // Create process that runs in user mode
 pcb_t* create_kernel_process(void (*entry_point)()); // Create process that runs in kernel mode
 void terminate_process(uint32_t pid);
-void switch_context(pcb_t *next_process);
 pcb_t* get_current_process();
 void set_current_process(pcb_t* process); // Set current process pointer
 void yield(); // Allow process to voluntarily give up CPU

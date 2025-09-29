@@ -11,27 +11,22 @@ extern unsigned long ticks;
 static int multitasking_enabled = 0;
 static int time_slice = 5; // Switch every 5 ticks
 
-// Legacy timer handler - now only used for non-multitasking timer events
+// Обработчик таймера, когда многозадачность выключена
 void timer_handler() {
     ticks++;
-    
-    // This handler is no longer used for context switching
-    // Context switching is now handled by context_switch_irq_handler in assembly
-    
     outb(0x20, 0x20); // EOI (End of Interrupt)
 }
 
 void enable_multitasking() {
     multitasking_enabled = 1;
-    
-    // Initialize the new context switching system
-    init_context_switching();
-    
+    init_context_switching(); // Эта функция теперь регистрирует правильный IRQ-хендлер
     puts("Preemptive multitasking enabled\n");
 }
 
 void disable_multitasking() {
     multitasking_enabled = 0;
+    // Возвращаем старый обработчик
+    REGISTER_IRQ_HANDLER(0, timer_handler);
     puts("Multitasking disabled\n");
 }
 
@@ -50,8 +45,8 @@ void init_timer(int frequency) {
     outb(0x43, 0x36);
     outb(0x40, divisor & 0xFF);
     outb(0x40, (divisor >> 8) & 0xFF);
-
-    // Use the legacy handler for now - multitasking will replace it
+    
+    // По умолчанию регистрируем простой обработчик
     REGISTER_IRQ_HANDLER(0, timer_handler);
     puts("Timer initialized (legacy handler)\n");
 }

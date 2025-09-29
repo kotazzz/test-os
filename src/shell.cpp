@@ -6,7 +6,6 @@ extern "C" {
     #include "std/string.h"
     #include "std/stddef.h"
     #include "shell.h"
-    #include "std/random.h"
     #include "memory/pmm.h"
     #include "memory/vmm.h"
     #include "process/pcb.h"
@@ -16,50 +15,17 @@ extern "C" {
     #include "gdt/gdt.h"
     #include "syscall/syscall.h"
 
-    // Forward declaration - эта функция остается в kernel.c
+    // Forward declaration from kernel.c
     extern uint64_t parse_multiboot2_memory_map(void *mbi);
+    // Forward declaration for Buddy Allocator debug info
+    extern buddy_block_t *free_lists[MAX_ORDER + 1];
+    // Forward declaration for heap debug info
+    extern uint64_t vmm_get_heap_info(uint64_t *start, uint64_t *current, uint64_t *end);
 }
 
 static void show_help(void);
 
-// Show cat
-static void cmd_cat(void *mbi) {
-    (void)mbi;
-    puts_color(" _._     _,-'\"\"`-._     \n", COLOR_INFO);
-    puts_color("(,-.`._,'(       |\\`-/| \n", COLOR_INFO);
-    puts_color("    `-.-' \\ )-`( , o o) \n", COLOR_INFO);
-    puts_color("          `-    \\`_`\"'- \n", COLOR_INFO);
-    puts("\nThis is a cat!\n");
-}
-
-static void cmd_random(void *mbi) {
-    (void)mbi;
-    puts_color("Random number: ", COLOR_INFO);
-    xorshift_state_t rng;
-    xorshift_seed(&rng, ticks);
-    puts_uint64_fg(xorshift_next(&rng), VGA_COLOR_WHITE);
-    puts("\n");
-}
-
-// Command handlers
-static void cmd_ticks(void *mbi) {
-    (void)mbi;
-    puts_color("System ticks: ", COLOR_INFO);
-    puts_uint64_fg(ticks, VGA_COLOR_WHITE);
-    puts("\n");
-}
-
-static void cmd_memory(void *mbi) {
-    uint64_t total_memory = parse_multiboot2_memory_map(mbi);
-    puts_color("Memory Information:\n", COLOR_INFO);
-    puts_color("  Total usable: ", COLOR_TEXT);
-    puts_uint64_fg(total_memory, VGA_COLOR_WHITE);
-    puts(" bytes (");
-    puts_uint64_fg(total_memory / 1024, VGA_COLOR_WHITE);
-    puts(" KB, ");
-    puts_uint64_fg(total_memory / (1024 * 1024), VGA_COLOR_WHITE);
-    puts(" MB)\n");
-}
+// === Basic System Commands ===
 
 static void cmd_help(void *mbi) {
     (void)mbi;
@@ -75,259 +41,127 @@ static void cmd_clear(void *mbi) {
     col = 0;
 }
 
-// Memory management commands
-static void cmd_pmm_info(void *mbi) {
+static void cmd_ticks(void *mbi) {
     (void)mbi;
-    puts_color("Physical Memory Manager Status:\n", COLOR_INFO);
-    puts_color("  Free memory: ", COLOR_TEXT);
+    puts_color("System ticks: ", COLOR_INFO);
+    puts_uint64_fg(ticks, VGA_COLOR_WHITE);
+    puts("\n");
+}
+
+// === Memory Management Commands ===
+
+// Consolidated command to show all memory-related information
+static void cmd_meminfo(void *mbi) {
+    (void)mbi;
+    uint64_t total_memory = parse_multiboot2_memory_map(mbi);
+
+    puts_color("--- Memory Subsystem Status ---\n", COLOR_INFO);
+
+    // Total Memory
+    puts_color("[Total Usable Memory]\n", COLOR_INFO);
+    puts_color("  ", COLOR_TEXT);
+    puts_uint64_fg(total_memory / (1024 * 1024), VGA_COLOR_WHITE);
+    puts(" MB\n");
+
+    // PMM Status
+    puts_color("[Physical Memory Manager]\n", COLOR_INFO);
+    puts_color("  Free: ", COLOR_TEXT);
     puts_uint64_fg(pmm_get_free_memory() / 1024, VGA_COLOR_GREEN);
     puts(" KB\n");
-    puts_color("  Used memory: ", COLOR_TEXT);
+    puts_color("  Used: ", COLOR_TEXT);
     puts_uint64_fg(pmm_get_used_memory() / 1024, VGA_COLOR_LIGHT_BROWN);
     puts(" KB\n");
-}
 
-static void cmd_memmap(void *mbi) {
-    (void)mbi;
-    puts_color("Physical Memory Map:\n", COLOR_INFO);
-    pmm_dump_memory_map();
-}
-
-// Debug kernel heap command
-extern uint64_t vmm_get_heap_info(uint64_t *start, uint64_t *current, uint64_t *end);
-
-static void cmd_heap_info(void *mbi) {
-    (void)mbi;
+    // Kernel Heap Status
+    puts_color("[Kernel Heap]\n", COLOR_INFO);
     uint64_t start, current, end;
-    vmm_get_heap_info(&start, &current, &end);
-    
-    puts_color("Kernel Heap Information:\n", COLOR_INFO);
-    
-    if (!vmm_is_initialized()) {
-        puts_color("  VMM or Heap is not initialized!\n", COLOR_ERROR);
-        return;
+    if (vmm_is_initialized() && vmm_get_heap_info(&start, &current, &end)) {
+        puts_color("  Start: 0x", COLOR_TEXT); puts_hex64(start); puts("\n");
+        puts_color("  End:   0x", COLOR_TEXT); puts_hex64(end); puts("\n");
+        puts_color("  Used:  ", COLOR_TEXT); puts_uint64((current - start) / 1024); puts(" KB\n");
+    } else {
+        puts_color("  Heap is not initialized.\n", COLOR_ERROR);
     }
-    
-    puts_color("  Start: 0x", COLOR_TEXT);
-    puts_hex64(start); puts("\n");
-    puts_color("  Current: 0x", COLOR_TEXT);
-    puts_hex64(current); puts("\n");
-    puts_color("  End: 0x", COLOR_TEXT);
-    puts_hex64(end); puts("\n");
-    puts_color("  Total size: ", COLOR_TEXT);
-    puts_uint64((end - start) / (1024 * 1024)); puts(" MB\n");
-    puts_color("  Used: ", COLOR_TEXT);
-    puts_uint64((current - start) / 1024); puts(" KB\n");
-    puts_color("  Available: ", COLOR_TEXT);
-    puts_uint64((end - current) / 1024); puts(" KB\n");
 }
 
-static void cmd_test_all(void *mbi) {
+// Memory subsystem test command
+static void cmd_test_mem(void *mbi) {
     (void)mbi;
-    puts_color("Running all tests:\n", COLOR_INFO);
+    puts_color("--- Running Memory Tests ---\n", COLOR_INFO);
 
     // Test PMM
     puts_color("[PMM Test]\n", COLOR_INFO);
     uint64_t page1 = pmm_alloc_page();
     uint64_t page2 = pmm_alloc_page();
-    uint64_t page3 = pmm_alloc_page();
-
-    if (page1 && page2 && page3) {
-        puts_color("  PMM Allocation: SUCCESS\n", COLOR_SUCCESS);
-        puts("    Page 1: 0x"); puts_hex64(page1); puts("\n");
-        puts("    Page 2: 0x"); puts_hex64(page2); puts("\n");
-        puts("    Page 3: 0x"); puts_hex64(page3); puts("\n");
-
+    if (page1 && page2) {
+        puts_color("  Allocation:  SUCCESS\n", COLOR_SUCCESS);
         pmm_free_page(page1);
         pmm_free_page(page2);
-        pmm_free_page(page3);
-        puts_color("  PMM Free: SUCCESS\n", COLOR_SUCCESS);
+        puts_color("  Freeing:     SUCCESS\n", COLOR_SUCCESS);
     } else {
-        puts_color("  PMM Allocation: FAILED\n", COLOR_ERROR);
+        puts_color("  Allocation:  FAILED\n", COLOR_ERROR);
     }
 
     // Test Kernel Malloc
     puts_color("[Kernel Malloc Test]\n", COLOR_INFO);
     void *ptr1 = kmalloc(64);
-    void *ptr2 = kmalloc(128);
-    void *ptr3 = kmalloc_aligned(256, 64);
-
-    if (ptr1 && ptr2 && ptr3) {
-        puts_color("  Kernel Malloc: SUCCESS\n", COLOR_SUCCESS);
-        puts("    ptr1 (64 bytes): 0x"); puts_hex64((uint64_t)ptr1); puts("\n");
-        puts("    ptr2 (128 bytes): 0x"); puts_hex64((uint64_t)ptr2); puts("\n");
-        puts("    ptr3 (256 bytes, 64-aligned): 0x"); puts_hex64((uint64_t)ptr3); puts("\n");
-
-        char *test_str = (char*)ptr1;
-        strcpy(test_str, "Hello from kmalloc!");
-        puts_color("    Test string written: ", COLOR_TEXT);
-        puts(test_str); puts("\n");
+    void *ptr2 = kmalloc_aligned(256, 64);
+    if (ptr1 && ptr2) {
+        puts_color("  Allocation:  SUCCESS\n", COLOR_SUCCESS);
+        strcpy((char*)ptr1, "Test string");
+        puts_color("  Write test:  SUCCESS (string='", COLOR_SUCCESS);
+        puts((char*)ptr1);
+        puts("')\n");
     } else {
-        puts_color("  Kernel Malloc: FAILED\n", COLOR_ERROR);
+        puts_color("  Allocation:  FAILED\n", COLOR_ERROR);
     }
-
-    // Test Heap Info
-    puts_color("[Kernel Heap Info]\n", COLOR_INFO);
-    uint64_t start, current, end;
-    vmm_get_heap_info(&start, &current, &end);
-
-    if (vmm_is_initialized()) {
-        puts_color("  Heap Info: SUCCESS\n", COLOR_SUCCESS);
-        puts("    Start: 0x"); puts_hex64(start); puts("\n");
-        puts("    Current: 0x"); puts_hex64(current); puts("\n");
-        puts("    End: 0x"); puts_hex64(end); puts("\n");
-        puts("    Total size: "); puts_uint64((end - start) / (1024 * 1024)); puts(" MB\n");
-        puts("    Used: "); puts_uint64((current - start) / 1024); puts(" KB\n");
-        puts("    Available: "); puts_uint64((end - current) / 1024); puts(" KB\n");
-    } else {
-        puts_color("  Heap Info: FAILED (VMM not initialized)\n", COLOR_ERROR);
-    }
-
-    puts_color("All tests completed.\n", COLOR_INFO);
+    puts_color("--- Memory tests completed ---\n", COLOR_INFO);
 }
 
-static void cmd_memory_info(void *mbi) {
-    puts_color("Memory Information:\n", COLOR_INFO);
 
-    // PMM Status
-    puts_color("[Physical Memory Manager]\n", COLOR_INFO);
-    puts_color("  Free memory: ", COLOR_TEXT);
-    puts_uint64_fg(pmm_get_free_memory() / 1024, VGA_COLOR_GREEN);
-    puts(" KB\n");
-    puts_color("  Used memory: ", COLOR_TEXT);
-    puts_uint64_fg(pmm_get_used_memory() / 1024, VGA_COLOR_LIGHT_BROWN);
-    puts(" KB\n");
+// === Process & Scheduler Commands ===
 
-    // Buddy Allocator Status
-    puts_color("[Buddy Allocator]\n", COLOR_INFO);
-    for (int i = 0; i <= MAX_ORDER; i++) {
-        puts("  Order "); puts_uint64(i); puts(": ");
-        buddy_block_t *block = free_lists[i];
-        int count = 0;
-        while (block) {
-            count++;
-            block = block->next;
-        }
-        puts_uint64(count); puts(" blocks\n");
-    }
-
-    // Kernel Heap Status
-    puts_color("[Kernel Heap]\n", COLOR_INFO);
-    uint64_t start, current, end;
-    vmm_get_heap_info(&start, &current, &end);
-
-    if (vmm_is_initialized()) {
-        puts_color("  Heap Info: SUCCESS\n", COLOR_SUCCESS);
-        puts("    Start: 0x"); puts_hex64(start); puts("\n");
-        puts("    Current: 0x"); puts_hex64(current); puts("\n");
-        puts("    End: 0x"); puts_hex64(end); puts("\n");
-        puts("    Total size: "); puts_uint64((end - start) / (1024 * 1024)); puts(" MB\n");
-        puts("    Used: "); puts_uint64((current - start) / 1024); puts(" KB\n");
-        puts("    Available: "); puts_uint64((end - current) / 1024); puts(" KB\n");
-    } else {
-        puts_color("  Heap Info: FAILED (VMM not initialized)\n", COLOR_ERROR);
-    }
-}
-
-// Process management commands
 static void cmd_ps(void *mbi) {
     (void)mbi;
-    puts_color("Process List:\n", COLOR_INFO);
+    puts_color("--- Process List ---\n", COLOR_INFO);
     debug_process_table();
 }
 
-static void cmd_create_test(void *mbi) {
+// Create all test processes (kernel and user) with one command
+static void cmd_proc_init(void *mbi) {
     (void)mbi;
-    puts_color("Creating test processes...\n", COLOR_INFO);
+    puts_color("Creating kernel test processes...\n", COLOR_INFO);
     create_test_processes();
-    puts_color("Test processes created.\n", COLOR_SUCCESS);
+    puts_color("Creating user space test processes...\n", COLOR_INFO);
+    create_user_processes();
+    puts_color("All test processes created.\n", COLOR_SUCCESS);
 }
 
-static void cmd_start_scheduler(void *mbi) {
-    (void)mbi;
-    puts_color("Starting scheduler...\n", COLOR_INFO);
-    start_multitasking();
-}
-
-static void cmd_run_scheduler(void *mbi) {
-    (void)mbi;
-    puts_color("Running scheduler once...\n", COLOR_INFO);
-    run_scheduler();
-}
-
-static void cmd_run_process_0(void *mbi) {
-    (void)mbi;
-    puts_color("Running process 0...\n", COLOR_INFO);
-    run_process_by_pid(0);
-}
-
-static void cmd_run_process_1(void *mbi) {
-    (void)mbi;
-    puts_color("Running process 1...\n", COLOR_INFO);
-    run_process_by_pid(1);
-}
-
-static void cmd_multitask(void *mbi) {
-    (void)mbi;
-    puts_color("Starting cooperative multitasking demo...\n", COLOR_INFO);
-    
-    // Run scheduler multiple times to see multitasking
-    for (int i = 0; i < 30; i++) {
-        run_scheduler();
-        // Small delay to see what's happening
-        for (volatile int j = 0; j < 500000; j++);
-    }
-    
-    puts_color("\nMultitasking demo finished\n", COLOR_SUCCESS);
-}
-
-static void cmd_auto_multi_on(void *mbi) {
+static void cmd_sched_start(void *mbi) {
     (void)mbi;
     enable_multitasking();
-    puts_color("Automatic multitasking ENABLED\n", COLOR_SUCCESS);
-    puts_color("Processes will switch automatically every 5 timer ticks\n", COLOR_INFO);
+    puts_color("Automatic multitasking ENABLED.\n", COLOR_SUCCESS);
+    puts_color("Scheduler will run on timer ticks.\n", COLOR_INFO);
 }
 
-static void cmd_auto_multi_off(void *mbi) {
+static void cmd_sched_stop(void *mbi) {
     (void)mbi;
     disable_multitasking();
-    puts_color("Automatic multitasking DISABLED\n", COLOR_WARNING);
+    puts_color("Automatic multitasking DISABLED.\n", COLOR_WARNING);
 }
 
-static void cmd_create_user(void *mbi) {
-    (void)mbi;
-    puts_color("Creating user space processes...\n", COLOR_INFO);
-    create_user_processes();
-}
 
-static void cmd_test_usermode(void *mbi) {
-    (void)mbi;
-    puts_color("Testing user mode switch...\n", COLOR_INFO);
-    switch_to_user_mode();
-}
-
-// Update command registry
+// === Command Registry ===
 static shell_command_t commands[] = {
-    {"test-all", "Run all tests", cmd_test_all},
-    {"memory-info", "Show detailed memory information", cmd_memory_info},
-    {"cat", "Show pretty cat", cmd_cat},
-    {"random", "Show random number", cmd_random},
-    {"ticks", "Show system ticks", cmd_ticks},
-    {"memory", "Show memory information", cmd_memory},
-    {"memmap", "Show physical memory map", cmd_memmap},
-    {"ps", "Show process list", cmd_ps},
-    {"create", "Create test processes", cmd_create_test},
-    {"start", "Start multitasking", cmd_start_scheduler},
-    {"sched", "Run scheduler once", cmd_run_scheduler},
-    {"run0", "Run process 0", cmd_run_process_0},
-    {"run1", "Run process 1", cmd_run_process_1},
-    {"multi", "Cooperative multitasking demo", cmd_multitask},
-    {"auto-on", "Enable automatic multitasking", cmd_auto_multi_on},
-    {"auto-off", "Disable automatic multitasking", cmd_auto_multi_off},
-    {"user-create", "Create user space processes", cmd_create_user},
-    {"usermode", "Test user mode switch", cmd_test_usermode},
-    {"help", "Show this help", cmd_help},
-    {"clear", "Clear the screen", cmd_clear},
+    {"help",        "Show this help message", cmd_help},
+    {"clear",       "Clear the screen", cmd_clear},
+    {"ticks",       "Show current system ticks", cmd_ticks},
+    {"meminfo",     "Show detailed memory status (PMM, Heap)", cmd_meminfo},
+    {"test_mem",    "Run tests for PMM and kmalloc", cmd_test_mem},
+    {"proc_init",   "Create all kernel and user test processes", cmd_proc_init},
+    {"ps",          "List all active processes", cmd_ps},
+    {"sched_start", "Enable automatic (preemptive) multitasking", cmd_sched_start},
+    {"sched_stop",  "Disable automatic multitasking", cmd_sched_stop},
     {nullptr, nullptr, nullptr}
 };
 
@@ -336,7 +170,11 @@ static void show_help(void) {
     for (int i = 0; commands[i].name != NULL; i++) {
         puts("  ");
         puts_color(commands[i].name, COLOR_SUCCESS);
-        puts(" - ");
+        // Padding for alignment
+        for (size_t p = 0; p < 14 - strlen(commands[i].name); ++p) {
+            puts(" ");
+        }
+        puts("- ");
         puts(commands[i].description);
         puts("\n");
     }
@@ -346,12 +184,13 @@ void run_shell(void *mbi) {
     char input_buffer[256];
     
     puts_color("-*- Mini Shell -*-\n", COLOR_INFO);
-    puts_color("shell> ", COLOR_WARNING);
+    puts_color("Type 'help' for a list of commands.\n", COLOR_TEXT);
     
     while(1) {
+        puts_color("shell> ", COLOR_WARNING);
         char* result = gets(input_buffer);
-        if (result != NULL) {
-            // Find and execute command
+
+        if (result != NULL && strlen(result) > 0) {
             bool command_found = false;
             for (int i = 0; commands[i].name != NULL; i++) {
                 if (strcmp(result, commands[i].name) == 0) {
@@ -362,12 +201,10 @@ void run_shell(void *mbi) {
             }
             
             if (!command_found) {
-                puts_color("Unknown command: ", COLOR_ERROR);
+                puts_color("Unknown command: '", COLOR_ERROR);
                 puts_fg(result, VGA_COLOR_RED);
-                puts_color("\nType 'help' for available commands\n", COLOR_TEXT);
+                puts("'\n");
             }
-            
-            puts_color("shell> ", COLOR_WARNING);
         }
     }
 }

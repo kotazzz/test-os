@@ -8,6 +8,9 @@
 #define KERNEL_DATA_SEGMENT 0x10  
 #define USER_CODE_SEGMENT   0x1B  // 0x18 | 3 (Ring 3)
 #define USER_DATA_SEGMENT   0x23  // 0x20 | 3 (Ring 3)
+#define TSS_SEGMENT         0x28  // Селектор для TSS
+
+#define GDT_ENTRIES_COUNT 7 // Null, KC, KD, UC, UD, TSS (2 слота)
 
 // GDT entry structure for 64-bit mode
 typedef struct {
@@ -27,5 +30,6 @@ typedef struct {
 
 void init_gdt(void);
 void switch_to_user_mode(void);
+void reload_segments(void); // Функция для перезагрузки сегментов
 
 #endif // GDT_H

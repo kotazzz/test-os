@@ -9,12 +9,15 @@
 .extern get_current_process
 .extern schedule_next_process
 .extern set_current_process
+.extern set_kernel_stack
+.extern vmm_get_current_page_directory # Используем эту функцию для получения PML4 ядра
 
 # Offsets for pcb_t structure 
 # These must match the actual struct layout - verify with debug_process_table()
-.equ PCB_STACK_POINTER, 16      # offsetof(pcb_t, stack_pointer) 
+.equ PCB_STACK_POINTER, 8       # offsetof(pcb_t, stack_pointer) - Corrected from 16
 .equ PCB_PAGE_DIRECTORY_PHYS, 32 # offsetof(pcb_t, page_directory_phys)
-.equ PCB_IS_USER_PROCESS, 192    # offsetof(pcb_t, is_user_process)
+.equ PCB_STACK_BASE, 16          # offsetof(pcb_t, stack_base)
+.equ PCB_IS_USER_PROCESS, 196    # offsetof(pcb_t, is_user_process) - ИСПРАВЛЕНО!
 
 # Timer IRQ handler with context switching
 context_switch_irq_handler:
@@ -45,6 +48,12 @@ context_switch_irq_handler:
     movq %rsp, PCB_STACK_POINTER(%rax)  # Save stack pointer to PCB->stack_pointer
 
 .no_current_process:
+    # === КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: ВЫРАВНИВАНИЕ СТЕКА ===
+    # Сохраняем текущий (невыровненный) RSP, чтобы восстановить его позже
+    pushq %rsp
+    # Выравниваем RSP по 16-байтной границе перед вызовом C-функций
+    andq $-16, %rsp
+
     # Update timer tick count
     incq ticks(%rip)
 
@@ -56,6 +65,9 @@ context_switch_irq_handler:
     movq %rbx, %rdi
     call set_current_process
 
+    # Восстанавливаем оригинальный указатель стека
+    popq %rsp
+
     # Check if we have a next process
     testq %rbx, %rbx
     jz .no_next_process
@@ -65,11 +77,25 @@ context_switch_irq_handler:
     testl %eax, %eax
     jz .kernel_process
     
+    # --- User Process ---
+    # ЭТО ВАЖНО: Обновляем RSP0 в TSS на вершину стека ядра этого процесса
+    # pcb->stack_base + 4096
+    movq PCB_STACK_BASE(%rbx), %rdi
+    addq $4096, %rdi  # Вершина стека
+    call set_kernel_stack
+
     # Load user process address space
     movq PCB_PAGE_DIRECTORY_PHYS(%rbx), %rax
     movq %rax, %cr3
+    jmp .restore_context
     
 .kernel_process:
+    # --- Kernel Process ---
+    # Восстанавливаем адресное пространство ядра
+    call vmm_get_current_page_directory
+    movq %rax, %cr3
+
+.restore_context:
     # Restore context from new process
     movq PCB_STACK_POINTER(%rbx), %rsp  # Load stack pointer from PCB->stack_pointer
     
@@ -169,11 +195,24 @@ restore_next_context:
     testl %eax, %eax
     jz .restore_kernel_process
     
+    # --- User Process ---
+    # Обновляем RSP0 в TSS на вершину стека ядра этого процесса
+    # pcb->stack_base + 4096
+    movq PCB_STACK_BASE(%rbx), %rdi
+    addq $4096, %rdi # Вершина стека
+    call set_kernel_stack
+
     # Load user process address space
     movq PCB_PAGE_DIRECTORY_PHYS(%rbx), %rax
     movq %rax, %cr3
+    jmp .restore_regs
     
 .restore_kernel_process:
+    # --- Kernel Process ---
+    call vmm_get_current_page_directory
+    movq %rax, %cr3
+
+.restore_regs:
     # Restore stack pointer
     movq PCB_STACK_POINTER(%rbx), %rsp
     

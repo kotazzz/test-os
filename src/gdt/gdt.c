@@ -1,10 +1,11 @@
 #include "gdt.h"
+#include "tss.h"
 #include "../vga.h"
 #include <stdint.h>
 
-// GDT with 5 entries: null, kernel code, kernel data, user code, user data
-static gdt_entry_t gdt_entries[5];
-static gdt_ptr_t gdt_ptr;
+// GDT with 7 entries: null, kernel code, kernel data, user code, user data, TSS (2 slots)
+gdt_entry_t gdt_entries[GDT_ENTRIES_COUNT];
+gdt_ptr_t gdt_ptr;
 
 static void gdt_set_gate(int num, uint32_t base, uint32_t limit, uint8_t access, uint8_t gran) {
     // В 64-битном режиме base и limit игнорируются для code/data сегментов
@@ -23,7 +24,7 @@ static void gdt_set_gate(int num, uint32_t base, uint32_t limit, uint8_t access,
 void init_gdt(void) {
     puts("Setting up GDT for 64-bit long mode...\n");
     
-    gdt_ptr.limit = (sizeof(gdt_entry_t) * 5) - 1;
+    gdt_ptr.limit = (sizeof(gdt_entry_t) * GDT_ENTRIES_COUNT) - 1;
     gdt_ptr.base = (uint64_t)&gdt_entries;
     
     // Null segment (0x00)
@@ -52,7 +53,26 @@ void init_gdt(void) {
     // Load the GDT
     __asm__ volatile ("lgdt %0" : : "m"(gdt_ptr));
     
+    // Инициализируем и загружаем TSS
+    init_tss();
+
+    // Перезагружаем сегментные регистры
+    reload_segments();
+
     puts("GDT loaded for 64-bit mode\n");
+}
+
+// Перезагружает сегментные регистры после обновления GDT
+void reload_segments(void) {
+    __asm__ volatile (
+        "pushq %[code_seg];"
+        "leaq 9f(%%rip), %%rax;"
+        "pushq %%rax;"
+        "lretq;"
+        "9:"
+        "movw %[data_seg], %%ax;"
+        "movw %%ax, %%ds; movw %%ax, %%es; movw %%ax, %%fs; movw %%ax, %%gs; movw %%ax, %%ss;"
+        : : [code_seg] "i"(KERNEL_CODE_SEGMENT), [data_seg] "i"(KERNEL_DATA_SEGMENT) : "rax", "memory");
 }
 
 // Function to switch from kernel mode to user mode

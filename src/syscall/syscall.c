@@ -65,16 +65,40 @@ void syscall_handler_main(struct registers *regs) {
     uint64_t result = 0;
     
     switch(syscall_num) {
-        case SYS_EXIT:
-            if (get_current_process()) {
-                terminate_process(get_current_process()->pid);
+        case SYS_EXIT: {
+            pcb_t* current = get_current_process();
+            if (current) {
+                terminate_process(current->pid); // This sets current_process to NULL
             }
-            yield(); // Переключаемся на другой процесс
-            break;
+            
+            // We are now in the syscall handler and cannot return to the terminated process.
+            // We must find a new process to run and switch to it directly.
+            extern pcb_t* get_next_process(void);
+            extern void restore_next_context(pcb_t*);
+            
+            pcb_t* next = get_next_process();
+            if (next) {
+                set_current_process(next);
+                restore_next_context(next); // This function will not return
+            }
+            
+            // If no other processes exist, halt the system.
+            puts("All processes terminated. System halting.\n");
+            __asm__ volatile ("cli; hlt");
+            break; // Unreachable
+        }
             
         case SYS_WRITE:
-            puts((const char*)arg1);
-            result = strlen((const char*)arg1);
+            // TODO: Проверка, что arg1 указывает на валидную память в user-space
+            // Для простоты, пока просто выводим, но в будущем нужна проверка
+            {
+                const char* str = (const char*)arg1;
+                // В реальной системе нужно скопировать строку в буфер ядра
+                // и проверить каждый байт на доступность.
+                // Пока что просто выведем.
+                puts(str);
+                result = strlen(str);
+            }
             break;
             
         case SYS_YIELD:

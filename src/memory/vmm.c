@@ -462,11 +462,15 @@ uint64_t *vmm_create_address_space(void) {
 
 // Copy kernel mappings to a new address space
 bool vmm_copy_kernel_mappings(uint64_t *dest_pml4_phys) {
-    page_table_t *dest_pml4 = (page_table_t *)dest_pml4_phys;
-    page_table_t *src_pml4 = (page_table_t *)current_pml4;
+    page_table_t *dest_pml4 = (page_table_t *)phys_to_virt((uint64_t)dest_pml4_phys);
+    page_table_t *src_pml4 = (page_table_t *)phys_to_virt(current_pml4);
 
+    // Copy the low memory identity mapping (first 512 GB, covering the kernel)
+    // This is crucial for interrupt and syscall handlers to be accessible.
+    dest_pml4->entries[0] = src_pml4->entries[0];
+    
     // Copy upper half entries (kernel space) - entries 256-511
-    for (int i = 256; i < 512; i++) {
+    for (int i = 256; i < 512; i++) { // For higher-half kernel if you use one later
         dest_pml4->entries[i] = src_pml4->entries[i];
     }
 
