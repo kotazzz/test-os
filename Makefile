@@ -1,8 +1,8 @@
 
-CC       := x86_64-elf-gcc.exe
-CXX      := x86_64-elf-g++.exe
-LD       := x86_64-elf-ld.exe
-QEMU     := qemu-system-x86_64.exe
+CC       := gcc
+CXX      := g++
+LD       := ld
+QEMU     := qemu-system-x86_64
 GRUB     := grub-mkrescue
 
 CFLAGS   := -ffreestanding -O2 -Wall -Wextra -mno-red-zone -nostdlib -mcmodel=large -mno-sse -MMD -MP -Isrc
