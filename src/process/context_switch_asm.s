@@ -17,7 +17,7 @@
 .equ PCB_STACK_POINTER, 8       # offsetof(pcb_t, stack_pointer) - Corrected from 16
 .equ PCB_PAGE_DIRECTORY_PHYS, 32 # offsetof(pcb_t, page_directory_phys)
 .equ PCB_STACK_BASE, 16          # offsetof(pcb_t, stack_base)
-.equ PCB_IS_USER_PROCESS, 196    # offsetof(pcb_t, is_user_process) - ИСПРАВЛЕНО!
+.equ PCB_IS_USER_PROCESS, 192    # offsetof(pcb_t, is_user_process) - FIXED OFFSET!
 
 # Timer IRQ handler with context switching
 context_switch_irq_handler:
@@ -48,56 +48,56 @@ context_switch_irq_handler:
     movq %rsp, PCB_STACK_POINTER(%rax)  # Save stack pointer to PCB->stack_pointer
 
 .no_current_process:
-    # === КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: ВЫРАВНИВАНИЕ СТЕКА ===
-    # Сохраняем текущий (невыровненный) RSP, чтобы восстановить его позже
-    pushq %rsp
-    # Выравниваем RSP по 16-байтной границе перед вызовом C-функций
-    andq $-16, %rsp
+    # === CRITICAL FIX: STACK ALIGNMENT ===
+    # The stack must be 16-byte aligned before calling C functions
+    # Save current RSP and align it
+    movq %rsp, %rbx            # Save original stack pointer
+    andq $-16, %rsp            # Align RSP to 16-byte boundary
 
     # Update timer tick count
     incq ticks(%rip)
 
     # Call scheduler to get next process  
     call schedule_next_process
-    movq %rax, %rbx  # Save next process in RBX
+    movq %rax, %rdx            # Save next process in RDX
     
     # Set as current process
-    movq %rbx, %rdi
+    movq %rdx, %rdi
     call set_current_process
 
-    # Восстанавливаем оригинальный указатель стека
-    popq %rsp
+    # Restore original stack pointer
+    movq %rbx, %rsp
 
     # Check if we have a next process
-    testq %rbx, %rbx
+    testq %rdx, %rdx
     jz .no_next_process
     
     # Check if it's a user process - if so, load its address space
-    movl PCB_IS_USER_PROCESS(%rbx), %eax
+    movl PCB_IS_USER_PROCESS(%rdx), %eax
     testl %eax, %eax
     jz .kernel_process
     
     # --- User Process ---
-    # ЭТО ВАЖНО: Обновляем RSP0 в TSS на вершину стека ядра этого процесса
+    # Update RSP0 in TSS to top of this process's kernel stack
     # pcb->stack_base + 4096
-    movq PCB_STACK_BASE(%rbx), %rdi
-    addq $4096, %rdi  # Вершина стека
+    movq PCB_STACK_BASE(%rdx), %rdi
+    addq $4096, %rdi          # Top of stack
     call set_kernel_stack
 
     # Load user process address space
-    movq PCB_PAGE_DIRECTORY_PHYS(%rbx), %rax
+    movq PCB_PAGE_DIRECTORY_PHYS(%rdx), %rax
     movq %rax, %cr3
     jmp .restore_context
     
 .kernel_process:
     # --- Kernel Process ---
-    # Восстанавливаем адресное пространство ядра
+    # Restore kernel address space
     call vmm_get_current_page_directory
     movq %rax, %cr3
 
 .restore_context:
     # Restore context from new process
-    movq PCB_STACK_POINTER(%rbx), %rsp  # Load stack pointer from PCB->stack_pointer
+    movq PCB_STACK_POINTER(%rdx), %rsp  # Load stack pointer from PCB->stack_pointer
     
     # Send EOI to PIC before restoring context
     movb $0x20, %al
@@ -196,10 +196,10 @@ restore_next_context:
     jz .restore_kernel_process
     
     # --- User Process ---
-    # Обновляем RSP0 в TSS на вершину стека ядра этого процесса
+    # Update RSP0 in TSS to top of this process's kernel stack
     # pcb->stack_base + 4096
     movq PCB_STACK_BASE(%rbx), %rdi
-    addq $4096, %rdi # Вершина стека
+    addq $4096, %rdi         # Top of stack
     call set_kernel_stack
 
     # Load user process address space

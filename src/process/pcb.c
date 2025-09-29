@@ -42,30 +42,31 @@ pcb_t* create_process(void (*entry_point)(), int is_user) {
 
             if (is_user) {
                 // Create separate address space for user process
-                uint64_t *new_pml4 = vmm_create_address_space();
-                if (!new_pml4) {
+                uint64_t *new_pml4_phys = vmm_create_address_space();
+                if (!new_pml4_phys) {
                     puts("Error: Failed to create address space for user process\n");
                     return NULL;
                 }
                 
-                p->page_directory = new_pml4;
-                p->page_directory_phys = (uint64_t)new_pml4;
+                // new_pml4_phys is the PHYSICAL address of the PML4 table
+                p->page_directory = new_pml4_phys;        // Store physical address 
+                p->page_directory_phys = (uint64_t)new_pml4_phys; // Physical address for CR3
                 
                 // Allocate user stack in physical memory
                 uint64_t user_stack_phys = pmm_alloc_page();
                 if (user_stack_phys == 0) {
                     puts("Error: Failed to allocate user stack page\n");
-                    vmm_destroy_address_space(new_pml4);
+                    vmm_destroy_address_space(new_pml4_phys);
                     return NULL;
                 }
                 p->user_stack_phys = user_stack_phys;
                 
                 // Map user stack to user virtual address space
                 p->user_stack_virt = USER_VIRTUAL_BASE + 0x10000; // User stack at 4MB + 64KB
-                if (!vmm_map_user_page(new_pml4, p->user_stack_virt, user_stack_phys)) {
+                if (!vmm_map_user_page(new_pml4_phys, p->user_stack_virt, user_stack_phys)) {
                     puts("Error: Failed to map user stack\n");
                     pmm_free_page(user_stack_phys);
-                    vmm_destroy_address_space(new_pml4);
+                    vmm_destroy_address_space(new_pml4_phys);
                     return NULL;
                 }
                 
@@ -74,7 +75,7 @@ pcb_t* create_process(void (*entry_point)(), int is_user) {
                 if (kernel_stack_page == 0) {
                     puts("Error: Failed to allocate kernel stack page\n");
                     pmm_free_page(user_stack_phys);
-                    vmm_destroy_address_space(new_pml4);
+                    vmm_destroy_address_space(new_pml4_phys);
                     return NULL;
                 }
                 p->stack_base = kernel_stack_page;
@@ -88,7 +89,7 @@ pcb_t* create_process(void (*entry_point)(), int is_user) {
                 puts("  Entry point: ");
                 puts_hex64((uint64_t)entry_point);
                 puts("\n  PML4 phys: ");
-                puts_hex64((uint64_t)new_pml4);
+                puts_hex64((uint64_t)new_pml4_phys);
                 puts("\n  User stack virt: ");
                 puts_hex64(p->user_stack_virt);
                 puts("\n  User stack top: ");

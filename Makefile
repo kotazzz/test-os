@@ -62,6 +62,10 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.s
 run: $(ISO_FILE)
 	$(QEMU) -cdrom $(ISO_FILE) -serial stdio $(QEMU_OPTS)
 
+# Запуск в QEMU в режиме без GUI (для тестирования)
+test: $(ISO_FILE)
+	$(QEMU) -cdrom $(ISO_FILE) -nographic $(QEMU_OPTS)
+
 
 # Очистка
 clean:

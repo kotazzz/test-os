@@ -12,23 +12,25 @@ extern pcb_t process_table[MAX_PROCESSES];
 static int current_index = -1;
 
 pcb_t* schedule_next() {
+    int start_index = current_index;
     int checked_count = 0;
     
-    for (int i = 0; i < MAX_PROCESSES; i++) {
+    do {
         current_index = (current_index + 1) % MAX_PROCESSES;
         checked_count++;
         
+        // Check if this process is ready to run
         if (process_table[current_index].state == PROCESS_READY) {
             return &process_table[current_index];
         }
         
-        // Prevent infinite loop
+        // Prevent infinite loop - if we've checked all processes
         if (checked_count >= MAX_PROCESSES) {
             break;
         }
-    }
+    } while (current_index != start_index);
     
-    return NULL; // No ready processes
+    return NULL; // No ready processes found
 }
 
 // Alias for the context switching system
